@@ -1,0 +1,10 @@
+# files
+.env
+.env.local
+package-lock.json
+yarn.lock
+
+# folders
+.temp
+build
+node_modules
