@@ -11,9 +11,9 @@ importers:
       discord-api-types:
         specifier: ^0.38.41
         version: 0.38.41
-      dotenv:
-        specifier: ^17.3.1
-        version: 17.3.1
+      eventemitter3:
+        specifier: ^5.0.4
+        version: 5.0.4
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -120,9 +120,8 @@ packages:
   discord-api-types@0.38.41:
     resolution: {integrity: sha512-yMECyR8j9c2fVTvCQ+Qc24pweYFIZk/XoxDOmt1UvPeSw5tK6gXBd/2hhP+FEAe9Y6ny8pRMaf618XDK4U53OQ==}
 
-  dotenv@17.3.1:
-    resolution: {integrity: sha512-IO8C/dzEb6O3F9/twg6ZLXz164a2fhTnEWb95H23Dm4OuN+92NmEAlTrupP9VW6Jm3sO26tQlqyvyi4CsnY9GA==}
-    engines: {node: '>=12'}
+  eventemitter3@5.0.4:
+    resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
 
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
@@ -327,7 +326,7 @@ snapshots:
 
   discord-api-types@0.38.41: {}
 
-  dotenv@17.3.1: {}
+  eventemitter3@5.0.4: {}
 
   fill-range@7.1.1:
     dependencies:
