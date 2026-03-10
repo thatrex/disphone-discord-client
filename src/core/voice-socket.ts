@@ -80,7 +80,7 @@ export class VoiceSocket extends EventEmitter {
 		})
 
 		this.emit('state', SocketState.INITIALISING)
-		this.openSocket(`wss://${params.address}/?v=7`)
+		this.openSocket(`wss://${params.address}/?v=8`)
 	}
 
 	private openSocket(address: string) {
@@ -123,7 +123,7 @@ export class VoiceSocket extends EventEmitter {
 			if (['DONE', 'FAILED'].includes(this.state)) return
 
 			if (this.state === SocketState.RESUMING) {
-				this.openSocket(`wss://${this.connection_data.address}/?v=7`)
+				this.openSocket(`wss://${this.connection_data.address}/?v=8`)
 				return
 			}
 
@@ -228,7 +228,7 @@ export class VoiceSocket extends EventEmitter {
 		this.debug?.('Resuming')
 
 		if (this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
-			this.openSocket(`wss://${this.connection_data.address}/?v=7`)
+			this.openSocket(`wss://${this.connection_data.address}/?v=8`)
 		} else this.ws.close()
 	}
 
