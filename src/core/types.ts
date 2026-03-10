@@ -1,4 +1,23 @@
-import type { VoiceOpcodes } from 'discord-api-types/voice'
+import { Snowflake } from 'discord-api-types/globals'
+import type {
+	_DataPayload,
+	VoiceOpcodes,
+	VoiceUDPProtocolData,
+	VoiceDaveMlsInvalidCommitWelcome,
+	VoiceDaveTransitionReady,
+	VoiceHeartbeat,
+	VoiceResume,
+	VoiceSpeakingSend,
+	VoiceClientDisconnect,
+	VoiceClientsConnect,
+	VoiceDaveExecuteTransition,
+	VoiceDavePrepareEpoch,
+	VoiceDavePrepareTransition,
+	VoiceHeartbeatAck,
+	VoiceHello,
+	VoiceResumed,
+	VoiceSpeaking,
+} from 'discord-api-types/voice'
 
 export type SocketState = keyof typeof SocketState
 export const SocketState = {
@@ -7,34 +26,20 @@ export const SocketState = {
 	READY: 'READY',
 	RESUMING: 'RESUMING',
 	DONE: 'DONE',
-	FAILED: 'FAILED'
+	FAILED: 'FAILED',
 } as const
-
-export type AudioSettings = {
-	bitrate_kbps: number
-	stereo: boolean
-	mode: 'sendrecv' | 'sendonly'
-}
-
-export type Codecs = {
-	name: string
-	type: string
-	priority: number
-	payload_type: number
-	rtx_payload_type: number | null
-}[]
 
 export type ReceiverToDo = keyof typeof ReceiverToDo
 export const ReceiverToDo = {
-	NOTHING: 'NOTHING',
 	ADD: 'ADD',
-	REMOVE: 'REMOVE'
+	REMOVE: 'REMOVE',
+	NOTHING: 'NOTHING',
 } as const
 
 export type TransceiverType = keyof typeof TransceiverType
 export const TransceiverType = {
 	SENDER: 'SENDER',
-	RECEIVER: 'RECEIVER'
+	RECEIVER: 'RECEIVER',
 } as const
 
 export type Transceiver = Sender | Receiver
@@ -53,49 +58,108 @@ export type Receiver = (
 	user_id: string
 }
 
+export type AudioSettings = {
+	bitrate_kbps: number
+	stereo: boolean
+	mode: 'sendrecv' | 'sendonly'
+}
+
+/* 
+Discord voice WebRTC has some differences to the documented UDP protocol.  
+The types Below could be considered `discord-api-types/voice-webrtc`.
+*/
+
+export * from 'discord-api-types/voice'
+export type * from 'discord-api-types/voice'
+
 export type VoiceSendPayload =
-	| VoiceIdentify
-	| VoiceSelectProtocol
-	| VoiceResume
+	| VoiceDaveMlsInvalidCommitWelcome
+	| VoiceDaveTransitionReady
 	| VoiceHeartbeat
+	| VoiceIdentify
+	| VoiceResume
+	| VoiceSelectProtocol
 	| VoiceSpeakingSend
 export type VoiceReceivePayload =
-	| VoiceReady
-	| VoiceSessionDescription
-	| VoiceSpeakingReceive
+	| VoiceClientDisconnect
+	| VoiceClientsConnect
+	| VoiceDaveExecuteTransition
+	| VoiceDavePrepareEpoch
+	| VoiceDavePrepareTransition
 	| VoiceHeartbeatAck
 	| VoiceHello
+	| VoiceReady
 	| VoiceResumed
-	| VoiceClientConnect
-	| VoiceClientDisconnect
+	| VoiceSessionDescription
+	| VoiceSpeaking
 
-interface VoiceDataPayload<OP extends VoiceOpcodes, D = unknown> {
-	op: OP
-	d: D
-}
-
-export type VoiceIdentify = VoiceDataPayload<VoiceOpcodes.Identify, VoiceIdentifyData>
-export interface VoiceIdentifyData {
-	server_id: string
-	user_id: string
+/** @see {@link https://discord.com/developers/docs/topics/voice-connections#establishing-a-voice-websocket-connection} */
+export type VoiceIdentify = _DataPayload<VoiceOpcodes.Identify, VoiceIdentifyData>
+/** @see {@link https://discord.com/developers/docs/topics/voice-connections#establishing-a-voice-websocket-connection} */
+export type VoiceIdentifyData = {
+	/** The id of the server to connect to */
+	server_id: Snowflake
+	/** The id of the user to connect as */
+	user_id: Snowflake
+	/** Voice state session id */
 	session_id: string
+	/** Voice connection token */
 	token: string
+	/** The maximum DAVE protocol version supported */
+	max_dave_protocol_version?: number
+	/** Undocumented */
 	video: boolean
+	/** Undocumented */
+	streams: {
+		type: string
+		rid: string
+		quality: number
+	}[]
 }
 
-export type VoiceSelectProtocol = VoiceDataPayload<
-	VoiceOpcodes.SelectProtocol,
-	VoiceSelectProtocolData
->
-export interface VoiceSelectProtocolData {
-	protocol: string
-	data: string
-	sdp: string
-	codecs: Codecs
-}
+/** @see {@link https://discord.com/developers/docs/topics/voice-connections#establishing-a-voice-udp-connection} */
+export type VoiceSelectProtocol = _DataPayload<VoiceOpcodes.SelectProtocol, VoiceSelectProtocolData>
+/** @see {@link https://discord.com/developers/docs/topics/voice-connections#establishing-a-voice-udp-connection} */
+export type Codecs = {
+	name: string
+	type: string
+	priority: number
+	payload_type: number
+	rtx_payload_type: number | null
+}[]
+// prettier-ignore
+export type VoiceSelectProtocolData =
+	{
+		/** Voice protocol */
+		protocol: 'udp'
+		/** Data associated with the protocol */
+		data: VoiceUDPProtocolData
+	} | {
+		/** Undocumented: Voice protocol */
+		protocol: 'webrtc'
+		/** Undocumented: Same as `sdp` */
+		data: string
+		/** Undocumented: The call SDP */
+		sdp: string
+		/** Undocumented: Allowed codecs */
+		codecs: Codecs
+	}
 
-export type VoiceReady = VoiceDataPayload<VoiceOpcodes.Ready, VoiceReadyData>
-export interface VoiceReadyData {
+/** @see {@link https://discord.com/developers/docs/topics/voice-connections#establishing-a-voice-websocket-connection} */
+export type VoiceReady = _DataPayload<VoiceOpcodes.Ready, VoiceReadyData>
+/** @see {@link https://discord.com/developers/docs/topics/voice-connections#establishing-a-voice-websocket-connection} */
+export type VoiceReadyData = {
+	/** SSRC identifier */
+	ssrc: number
+	/** UDP IP */
+	ip: string
+	/** UDP port */
+	port: number
+	/** Supported encryption modes
+	 * @see {@link https://discord.com/developers/docs/topics/voice-connections#transport-encryption-modes}
+	 */
+	modes: string[]
+	/** Undocumented: Audio streams */
 	streams: {
 		type: string
 		ssrc: number
@@ -104,70 +168,21 @@ export interface VoiceReadyData {
 		quality: number
 		active: boolean
 	}[]
-	ssrc: number
-	port: number
-	modes: string[]
-	ip: string
 }
 
-export type VoiceHeartbeat = VoiceDataPayload<VoiceOpcodes.Heartbeat, string>
-
-export type VoiceSessionDescription = VoiceDataPayload<
+/** Undocumented: The WebRTC session description data is almost completely diffrent to that of UDP */
+export type VoiceSessionDescription = _DataPayload<
 	VoiceOpcodes.SessionDescription,
 	VoiceSessionDescriptionData
 >
-export interface VoiceSessionDescriptionData {
-	video_codec: string
-	sdp: string
+/** Undocumented: The WebRTC session description data is almost completely diffrent to that of UDP */
+export type VoiceSessionDescriptionData = {
+	/** The selected DAVE protocol version
+	 * @see {@link https://daveprotocol.com/#select_protocol_ack-4}
+	 */
+	dave_protocol_version: number
 	media_session_id: string
+	video_codec: string
 	audio_codec: string
-}
-
-export type VoiceSpeakingSend = VoiceDataPayload<VoiceOpcodes.Speaking, VoiceSpeakingSendData>
-export interface VoiceSpeakingSendData {
-	speaking: 0 | 1
-	delay: number
-	ssrc: number
-}
-
-export type VoiceSpeakingReceive = VoiceDataPayload<VoiceOpcodes.Speaking, VoiceSpeakingReceiveData>
-export interface VoiceSpeakingReceiveData {
-	speaking: 0 | 1
-	user_id: string
-	ssrc: number
-}
-
-export type VoiceHeartbeatAck = VoiceDataPayload<VoiceOpcodes.HeartbeatAck, string>
-
-export type VoiceResume = VoiceDataPayload<VoiceOpcodes.Resume, VoiceResumeData>
-export interface VoiceResumeData {
-	server_id: string
-	session_id: string
-	token: string
-}
-
-export type VoiceHello = VoiceDataPayload<VoiceOpcodes.Hello, VoiceHelloData>
-export interface VoiceHelloData {
-	v: number
-	heartbeat_interval: number
-}
-
-export type VoiceResumed = VoiceDataPayload<VoiceOpcodes.Resumed, null>
-
-export type VoiceClientConnect = VoiceDataPayload<
-	VoiceOpcodes.ClientsConnect,
-	VoiceClientConnectData
->
-export interface VoiceClientConnectData {
-	user_id: string
-	ssrc: number
-	speaking: 0 | 1
-}
-
-export type VoiceClientDisconnect = VoiceDataPayload<
-	VoiceOpcodes.ClientDisconnect,
-	VoiceClientDisconnectData
->
-export interface VoiceClientDisconnectData {
-	user_id: string
+	sdp: string
 }
