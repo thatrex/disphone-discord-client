@@ -15,6 +15,7 @@ export default defineConfig({
 	use: {
 		baseURL: 'https://localhost:5173',
 		trace: 'on-first-retry',
+		ignoreHTTPSErrors: true,
 	},
 	projects: [
 		{
