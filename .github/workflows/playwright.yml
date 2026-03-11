@@ -19,6 +19,8 @@ jobs:
       run: pnpm exec playwright install --with-deps
     - name: Run Playwright tests
       run: pnpm exec playwright test
+      env:
+        VITE_DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:
