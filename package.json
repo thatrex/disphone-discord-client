@@ -28,10 +28,10 @@
 		"@playwright/test": "^1.58.2",
 		"@types/node": "^25.4.0",
 		"@types/pako": "^2.0.4",
-		"@vitejs/plugin-basic-ssl": "^2.1.4",
 		"prettier": "^3.8.1",
 		"ts-node": "^10.9.2",
 		"typescript": "5.9.3",
-		"vite": "^7.3.1"
+		"vite": "^7.3.1",
+		"vite-plugin-mkcert": "^1.17.10"
 	}
 }

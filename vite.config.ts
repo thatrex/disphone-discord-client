@@ -1,7 +1,7 @@
 // https://vite.dev/config/
 
 import { defineConfig, loadEnv } from 'vite'
-import basicSsl from '@vitejs/plugin-basic-ssl'
+import mkcert from 'vite-plugin-mkcert'
 
 const TEST_SITE_PATH = './testing/web/'
 
@@ -12,6 +12,6 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		root: TEST_SITE_PATH,
-		plugins: [basicSsl()],
+		plugins: [mkcert()],
 	}
 })
