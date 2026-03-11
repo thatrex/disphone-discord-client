@@ -2,6 +2,6 @@
     "recommendations": [
 		"esbenp.prettier-vscode",
 		"mylesmurphy.prettify-ts",
-		"usernamehw.errorlens"
+		"ms-playwright.playwright"
     ]
 }
