@@ -5,29 +5,33 @@
 	"license": "Apache-2.0",
 	"description": "An unofficial Discord browser client developed for Disphone.",
 	"keywords": [
+		"disphone",
 		"discord",
 		"browser",
-		"client",
-		"disphone"
+		"client"
 	],
 	"type": "module",
 	"main": "build/index.js",
 	"scripts": {
-		"dev": "node --loader ts-node/esm src/index.ts",
-		"watch": "nodemon --exec pnpm run dev --watch src --ext ts",
+		"dev": "vite",
+		"test": "playwright test && playwright show-report",
 		"build": "tsc",
-		"start": "node build/index.js"
+		"format": "prettier --write ."
 	},
 	"dependencies": {
-		"discord-api-types": "^0.38.41",
+		"@snazzah/davey": "^0.1.10",
+		"discord-api-types": "^0.38.42",
 		"eventemitter3": "^5.0.4",
-		"zod": "^4.3.6"
+		"pako": "^2.1.0"
 	},
 	"devDependencies": {
-		"@types/node": "^25.3.5",
-		"nodemon": "^3.1.14",
+		"@playwright/test": "^1.58.2",
+		"@types/node": "^25.4.0",
+		"@types/pako": "^2.0.4",
 		"prettier": "^3.8.1",
 		"ts-node": "^10.9.2",
-		"typescript": "5.9.3"
+		"typescript": "5.9.3",
+		"vite": "^7.3.1",
+		"vite-plugin-mkcert": "^1.17.10"
 	}
 }
