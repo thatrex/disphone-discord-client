@@ -1,9 +1,10 @@
 import EventEmitter from 'eventemitter3'
-import { type Codecs, SocketState, type VoiceReceivePayload } from './types'
-import { VoiceCloseCodes, VoiceOpcodes } from 'discord-api-types/voice'
 import { GatewayCloseCodes } from 'discord-api-types/v10'
-import { wait } from './utils'
+import { VoiceCloseCodes, VoiceOpcodes } from 'discord-api-types/voice'
+import { SocketState } from '../types/common'
+import { Codecs, VoiceReceivePayload } from '../types/voice'
 import { VoiceSocketError, VoiceSocketNotReadyError } from './errors'
+import { wait } from '../utils/wait'
 
 const RECONNECTABLE_CLOSE_CODES = [
 	1005, // No Status Rcvd

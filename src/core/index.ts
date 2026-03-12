@@ -1,12 +1,12 @@
 import EventEmitter from 'eventemitter3'
 import {
-	type GatewayIdentifyProperties,
-	type GatewayPresenceUpdateData,
-	GatewayOpcodes
+	GatewayIdentifyProperties,
+	GatewayPresenceUpdateData,
+	GatewayOpcodes,
 } from 'discord-api-types/v10'
+import { AudioSettings, SocketState } from '../types/common'
 import { GatewaySocket } from './gateway-socket'
 import { VoiceManager } from './voice-manager'
-import type { AudioSettings, SocketState } from './types'
 
 interface Client extends EventEmitter {
 	on(event: '', listener: () => void): this
@@ -42,7 +42,7 @@ class Client extends EventEmitter {
 			intents: params.intents,
 			presence: params.presence,
 			properties: params.properties,
-			debug: this._debug
+			debug: this._debug,
 		})
 
 		this._gateway.on('state', (s) => this.emit('state', s))
@@ -55,16 +55,20 @@ class Client extends EventEmitter {
 	public setPresence(params: GatewayPresenceUpdateData) {
 		this._gateway.sendPacket({
 			op: GatewayOpcodes.PresenceUpdate,
-			d: params
+			d: params,
 		})
 	}
 
-	public createVoiceManager(params: { ac: AudioContext; audio_settings?: Partial<AudioSettings> }) {
+	/** Ensure user media access is granted **before** attempting to join a voice channel. Not doing so will result in the RTC connection failing. */
+	public createVoiceManager(params: {
+		ac: AudioContext
+		audio_settings?: Partial<AudioSettings>
+	}) {
 		return new VoiceManager({
 			ac: params.ac,
 			gateway_socket: this._gateway,
 			debug: this._debug,
-			audio_settings: params.audio_settings
+			audio_settings: params.audio_settings,
 		})
 	}
 

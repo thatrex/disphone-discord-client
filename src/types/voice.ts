@@ -19,51 +19,6 @@ import type {
 	VoiceSpeaking,
 } from 'discord-api-types/voice'
 
-export type SocketState = keyof typeof SocketState
-export const SocketState = {
-	INITIAL: 'INITIAL',
-	INITIALISING: 'INITIALISING',
-	READY: 'READY',
-	RESUMING: 'RESUMING',
-	DONE: 'DONE',
-	FAILED: 'FAILED',
-} as const
-
-export type ReceiverToDo = keyof typeof ReceiverToDo
-export const ReceiverToDo = {
-	ADD: 'ADD',
-	REMOVE: 'REMOVE',
-	NOTHING: 'NOTHING',
-} as const
-
-export type TransceiverType = keyof typeof TransceiverType
-export const TransceiverType = {
-	SENDER: 'SENDER',
-	RECEIVER: 'RECEIVER',
-} as const
-
-export type Transceiver = Sender | Receiver
-
-export type Sender = {
-	type: 'SENDER'
-	transceiver: RTCRtpTransceiver
-}
-
-export type Receiver = (
-	| { todo: Exclude<ReceiverToDo, 'REMOVE'>; transceiver?: RTCRtpTransceiver }
-	| { todo: 'REMOVE'; transceiver: RTCRtpTransceiver }
-) & {
-	type: 'RECEIVER'
-	ssrc: number
-	user_id: string
-}
-
-export type AudioSettings = {
-	bitrate_kbps: number
-	stereo: boolean
-	mode: 'sendrecv' | 'sendonly'
-}
-
 /* 
 Discord voice WebRTC has some differences to the documented UDP protocol.  
 The types Below could be considered `discord-api-types/voice-webrtc`.

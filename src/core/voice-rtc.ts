@@ -1,14 +1,37 @@
 import EventEmitter from 'eventemitter3'
-import { SDP } from './sdp'
+import { AudioSettings } from '../types/common'
 import { VoiceRTCConnectionError, VoiceRTCOfferError } from './errors'
-import {
-	type AudioSettings,
-	type Receiver,
-	type Transceiver,
-	ReceiverToDo,
-	TransceiverType,
-} from './types'
-import { generateDummyStream } from './utils'
+import { createPlaceholderStream } from '../utils/create-placeholder-stream'
+import { SDP } from '../utils/sdp'
+
+export type ReceiverToDo = keyof typeof ReceiverToDo
+export const ReceiverToDo = {
+	ADD: 'ADD',
+	REMOVE: 'REMOVE',
+	NOTHING: 'NOTHING',
+} as const
+
+export type TransceiverType = keyof typeof TransceiverType
+export const TransceiverType = {
+	SENDER: 'SENDER',
+	RECEIVER: 'RECEIVER',
+} as const
+
+export type Transceiver = Sender | Receiver
+
+export type Sender = {
+	type: 'SENDER'
+	transceiver: RTCRtpTransceiver
+}
+
+export type Receiver = (
+	| { todo: Exclude<ReceiverToDo, 'REMOVE'>; transceiver?: RTCRtpTransceiver }
+	| { todo: 'REMOVE'; transceiver: RTCRtpTransceiver }
+) & {
+	type: 'RECEIVER'
+	ssrc: number
+	user_id: string
+}
 
 export interface VoiceRTC extends EventEmitter {
 	on(event: 'state', listener: (state: RTCPeerConnectionState) => void): this
@@ -97,7 +120,7 @@ export class VoiceRTC extends EventEmitter {
 		this.debug?.('Initiating')
 
 		this.audio_settings = params.audio_settings
-		const [dummy_track] = generateDummyStream(this.ac).getAudioTracks()
+		const [dummy_track] = createPlaceholderStream(this.ac).getAudioTracks()
 		const transceiver = this.pc.addTransceiver(dummy_track, { direction: 'sendonly' })
 		const [track_i] = this.dst_i.stream.getAudioTracks()
 		transceiver.sender.replaceTrack(track_i)

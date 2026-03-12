@@ -1,23 +1,23 @@
 import EventEmitter from 'eventemitter3'
-import { SocketState } from './types'
-import { GatewaySocketError, GatewaySocketInitError, GatewaySocketNotReadyError } from './errors'
 import {
-	type GatewayHeartbeat,
-	type GatewayIdentify,
-	type GatewayReceivePayload,
-	type GatewayResume,
-	GatewayOpcodes
+	GatewayHeartbeat,
+	GatewayIdentify,
+	GatewayReceivePayload,
+	GatewayResume,
+	GatewayOpcodes,
 } from 'discord-api-types/gateway'
 import {
-	type GatewayDispatchPayload,
-	type GatewayIdentifyProperties,
-	type GatewayPresenceUpdateData,
+	GatewayDispatchPayload,
+	GatewayIdentifyProperties,
+	GatewayPresenceUpdateData,
 	PresenceUpdateStatus,
 	GatewayDispatchEvents,
 	GatewayCloseCodes,
-	type GatewaySendPayload
+	GatewaySendPayload,
 } from 'discord-api-types/v10'
-import { wait } from './utils'
+import { SocketState } from '../types/common'
+import { GatewaySocketError, GatewaySocketInitError, GatewaySocketNotReadyError } from './errors'
+import { wait } from '../utils/wait'
 
 const RECONNECTABLE_CLOSE_CODES = [
 	1005, // No Status Rcvd
@@ -29,7 +29,7 @@ const RECONNECTABLE_CLOSE_CODES = [
 	GatewayCloseCodes.AlreadyAuthenticated,
 	GatewayCloseCodes.InvalidSeq,
 	GatewayCloseCodes.RateLimited,
-	GatewayCloseCodes.SessionTimedOut
+	GatewayCloseCodes.SessionTimedOut,
 ] as const
 
 export interface GatewaySocket extends EventEmitter {
@@ -73,15 +73,15 @@ export class GatewaySocket extends EventEmitter {
 		properties: {
 			os: 'linux',
 			browser: '',
-			device: ''
-		}
+			device: '',
+		},
 	}
 
 	private inital_presence: GatewayPresenceUpdateData = {
 		since: 0,
 		activities: [],
 		status: PresenceUpdateStatus.Online,
-		afk: false
+		afk: false,
 	}
 
 	private _identity?: {
@@ -118,7 +118,7 @@ export class GatewaySocket extends EventEmitter {
 			presence,
 			max_resume_attempts,
 			initial_gateway_url,
-			debug
+			debug,
 		} = params
 
 		this.debug = !debug ? undefined : (...args) => console.debug('[Gateway Socket]', ...args)
@@ -139,7 +139,9 @@ export class GatewaySocket extends EventEmitter {
 
 	public init() {
 		if (['INITIALISING', 'READY', 'RESUMING'].includes(this.state)) {
-			throw new GatewaySocketInitError('Socket State is either INITIALISING, READY or RESUMING.')
+			throw new GatewaySocketInitError(
+				'Socket State is either INITIALISING, READY or RESUMING.'
+			)
 		}
 
 		this.emit('state', SocketState.INITIALISING)
@@ -166,8 +168,8 @@ export class GatewaySocket extends EventEmitter {
 				d: {
 					token: this.connection_data.token,
 					seq: this.last_sequence_number!,
-					session_id: this.connection_data.session_id!
-				}
+					session_id: this.connection_data.session_id!,
+				},
 			} satisfies GatewayResume)
 
 			this.resumed = false
@@ -263,7 +265,7 @@ export class GatewaySocket extends EventEmitter {
 				const {
 					resume_gateway_url,
 					session_id,
-					user: { id, username, discriminator, bot }
+					user: { id, username, discriminator, bot },
 				} = packet.d
 
 				this.connection_data.resume_gateway_url = resume_gateway_url
@@ -286,7 +288,7 @@ export class GatewaySocket extends EventEmitter {
 		this.missed_heartbeats++
 		this.sendPacket({
 			op: GatewayOpcodes.Heartbeat,
-			d: this.last_sequence_number
+			d: this.last_sequence_number,
 		} satisfies GatewayHeartbeat)
 	}
 
@@ -297,7 +299,8 @@ export class GatewaySocket extends EventEmitter {
 		clearInterval(this.hartbeat_interval)
 		this.hartbeat_interval = setInterval(() => {
 			if (this.missed_heartbeats > 2) {
-				if (this.state !== SocketState.RESUMING) this.doResume('Too many missed heartbeats.')
+				if (this.state !== SocketState.RESUMING)
+					this.doResume('Too many missed heartbeats.')
 				return
 			}
 			this.sendHeartbeat()
@@ -312,13 +315,13 @@ export class GatewaySocket extends EventEmitter {
 			d: {
 				token: this.connection_data.token,
 				intents: this.connection_data.intents,
-				properties: this.connection_data.properties
-			}
+				properties: this.connection_data.properties,
+			},
 		} satisfies GatewayIdentify)
 
 		this.sendPacket({
 			op: GatewayOpcodes.PresenceUpdate,
-			d: this.inital_presence
+			d: this.inital_presence,
 		})
 	}
 

@@ -1,15 +1,12 @@
-import { SocketState, type AudioSettings, type Codecs, type VoiceReceivePayload } from './types'
-import type { GatewaySocket } from './gateway-socket'
 import EventEmitter from 'eventemitter3'
-import {
-	GatewayDispatchEvents,
-	GatewayOpcodes,
-	type GatewayReceivePayload,
-} from 'discord-api-types/v10'
+import { GatewayDispatchEvents, GatewayOpcodes, GatewayReceivePayload } from 'discord-api-types/v10'
 import { VoiceOpcodes } from 'discord-api-types/voice'
+import { SocketState, AudioSettings } from '../types/common'
+import { Codecs, VoiceReceivePayload } from '../types/voice'
+import { VoiceManagerConnectionError } from './errors'
+import { GatewaySocket } from './gateway-socket'
 import { VoiceSocket } from './voice-socket'
 import { VoiceRTC } from './voice-rtc'
-import { VoiceManagerConnectionError } from './errors'
 
 export type VoiceManagerState = keyof typeof VoiceManagerState
 export const VoiceManagerState = {
