@@ -6,6 +6,7 @@ yarn.lock
 
 # folders
 .temp
+temp
 build
 node_modules
 

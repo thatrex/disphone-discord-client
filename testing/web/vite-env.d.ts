@@ -5,7 +5,7 @@ interface ViteTypeOptions {
 }
 
 interface ImportMetaEnv {
-	readonly VITE_BOT_TOKEN: string
+	readonly VITE_DISCORD_TOKEN: string
 }
 
 interface ImportMeta {
