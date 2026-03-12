@@ -62,7 +62,7 @@ export type VoiceIdentifyData = {
 	token: string
 	/** The maximum DAVE protocol version supported */
 	max_dave_protocol_version?: number
-	/** Undocumented */
+	/** Undocumented: ?? If the client has video capabilities */
 	video: boolean
 	/** Undocumented */
 	streams: {
