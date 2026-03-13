@@ -28,6 +28,7 @@
 		"@types/node": "^25.4.0",
 		"@types/pako": "^2.0.4",
 		"@vitest/browser-playwright": "^4.1.0",
+		"playwright": "^1.58.2",
 		"prettier": "^3.8.1",
 		"svelte": "^5.53.11",
 		"ts-node": "^10.9.2",
