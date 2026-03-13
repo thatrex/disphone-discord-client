@@ -8,5 +8,8 @@
 		".env": "*.env, .env.*, .envrc, env.d.ts",
 		"package.json": ".gitignore, tsconfig.*, pnpm*, .pnpm*, .prettier*, .eslint*, *.config.ts",
 		"README.md": "LICENSE*, README*, CHANGELOG*, ROADMAP*"
+	},
+	"files.exclude": {
+		"node_modules": true
 	}
 }
