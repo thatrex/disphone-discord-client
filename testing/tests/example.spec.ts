@@ -1,6 +1,9 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from 'vitest'
+import { render } from 'vitest-browser-svelte'
+import Testing from '../Testing.svelte'
 
-test('has title', async ({ page }) => {
-	await page.goto('/')
-	await expect(page).toHaveTitle(/disphone-discord-client/)
+test('has content', async () => {
+	const page = render(Testing)
+	const el = page.getByText(/Hello World/i)
+	await expect.element(el).toBeInTheDocument()
 })

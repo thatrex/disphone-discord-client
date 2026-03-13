@@ -3,11 +3,10 @@
 		"target": "ES6",
 		"module": "ESNext",
 		"outDir": "build",
-		"rootDir": "src",
 		"lib": ["DOM", "ESNext"],
-		"types": [],
+		"types": ["vite/client"],
 		"strict": true,
-		"moduleResolution": "Node",
+		"moduleResolution": "Bundler",
 		"allowSyntheticDefaultImports": true,
 		"resolveJsonModule": true,
 		"skipLibCheck": true,
@@ -17,5 +16,5 @@
 		"transpileOnly": true,
 		"experimentalSpecifierResolution": "node"
 	},
-	"include": ["src/**/*.ts"]
+	"include": ["src/**/*.ts", "testing/**/*.svelte", "testing/**/*.ts"]
 }
