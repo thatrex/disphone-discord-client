@@ -14,7 +14,6 @@ export default defineConfig(({ mode }) => {
 		plugins: [svelte(), mkcert()],
 		test: {
 			env,
-			reporters: process.env.GITHUB_ACTIONS === 'true' ? ['dot', 'github-actions'] : ['dot'],
 			browser: {
 				enabled: true,
 				instances: [{ browser: 'chromium' }],
