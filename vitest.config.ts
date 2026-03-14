@@ -1,9 +1,10 @@
-import { defineConfig } from 'vitest/config'
 import { loadEnv } from 'vite'
+import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
-import mkcert from 'vite-plugin-mkcert'
 import { playwright } from '@vitest/browser-playwright'
+import mkcert from 'vite-plugin-mkcert'
 
+// https://vitest.dev/config/
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, './testing/', '')
 
