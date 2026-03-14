@@ -13,7 +13,7 @@
 	"scripts": {
 		"dev": "vite --host",
 		"test": "vitest",
-		"build": "tsc",
+		"build": "tsc --project tsconfig.build.json",
 		"format": "prettier --write ."
 	},
 	"type": "module",
