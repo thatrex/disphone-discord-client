@@ -10,13 +10,14 @@
 		"browser",
 		"client"
 	],
-	"type": "module",
-	"main": "build/index.js",
 	"scripts": {
 		"test": "vitest",
 		"build": "tsc",
 		"format": "prettier --write ."
 	},
+	"type": "module",
+	"main": "build/index.js",
+	"packageManager": "pnpm@10.31.0",
 	"dependencies": {
 		"@snazzah/davey": "^0.1.10",
 		"discord-api-types": "^0.38.42",
