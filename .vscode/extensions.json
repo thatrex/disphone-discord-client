@@ -1,7 +1,8 @@
 {
-    "recommendations": [
+	"recommendations": [
+		"irongeek.vscode-env",
 		"esbenp.prettier-vscode",
-		"mylesmurphy.prettify-ts",
-		"ms-playwright.playwright"
-    ]
+		"svelte.svelte-vscode",
+		"mylesmurphy.prettify-ts"
+	]
 }
