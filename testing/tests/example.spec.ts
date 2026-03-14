@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { render } from 'vitest-browser-svelte'
-import Testing from '../Example.svelte'
+import Testing from '../components/Example.svelte'
 
 test('has content', async () => {
 	const page = render(Testing)
