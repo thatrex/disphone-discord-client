@@ -1,14 +1,26 @@
-# files
-.env
-.env.local
-package-lock.json
-yarn.lock
-
-# folders
-.temp
-temp
-build
 node_modules
+temp
+.temp
+.output
+.vercel
+.netlify
+.wrangler
+/build
+/package
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
 
 # Playwright
 /test-results/

@@ -1,8 +1,10 @@
 {
 	"recommendations": [
 		"irongeek.vscode-env",
-		"esbenp.prettier-vscode",
+		"mylesmurphy.prettify-ts",
+		"aaron-bond.better-comments",
 		"svelte.svelte-vscode",
-		"mylesmurphy.prettify-ts"
+		"esbenp.prettier-vscode",
+		"dbaeumer.vscode-eslint"
 	]
 }

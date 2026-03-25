@@ -8,7 +8,7 @@ import mkcert from 'vite-plugin-mkcert'
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, './testing/', '')
 
-	if (!env.VITE_DISCORD_TOKEN)
+	if (!env['VITE_DISCORD_TOKEN'])
 		throw Error('Missing required environment variable: VITE_DISCORD_TOKEN')
 
 	return {

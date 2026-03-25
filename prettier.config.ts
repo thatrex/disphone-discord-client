@@ -1,0 +1,13 @@
+import { type Config } from 'prettier'
+
+export default {
+	semi: false,
+	useTabs: true,
+	singleQuote: true,
+	trailingComma: 'es5',
+	printWidth: 100,
+	tabWidth: 4,
+	plugins: ['prettier-plugin-svelte'],
+	pluginSearchDirs: ['.'],
+	overrides: [{ files: '*.svelte', options: { parser: 'svelte' } }],
+} satisfies Config

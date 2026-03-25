@@ -1,20 +1,29 @@
 {
 	"compilerOptions": {
-		"target": "ES6",
-		"module": "ESNext",
-		"outDir": "build",
 		"lib": ["DOM", "ESNext"],
 		"types": ["vite/client"],
-		"strict": true,
-		"moduleResolution": "Bundler",
-		"allowSyntheticDefaultImports": true,
-		"resolveJsonModule": true,
+		"paths": { "@/*": ["./src/*"] },
+
+		"outDir": "build",
+		"target": "esnext",
+		"module": "esnext",
+		"moduleResolution": "bundler",
+
 		"skipLibCheck": true,
-		"forceConsistentCasingInFileNames": true
+		"resolveJsonModule": true,
+		"forceConsistentCasingInFileNames": true,
+
+		"strict": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": false,
+		"allowUnusedLabels": false,
+		"noUncheckedSideEffectImports": true,
+		"noFallthroughCasesInSwitch": true,
+		"allowUnreachableCode": false,
+		"noUncheckedIndexedAccess": true,
+		"noPropertyAccessFromIndexSignature": true,
+		"exactOptionalPropertyTypes": true,
+		"noImplicitOverride": true
 	},
-	"ts-node": {
-		"transpileOnly": true,
-		"experimentalSpecifierResolution": "node"
-	},
-	"include": ["src/**/*.ts", "testing/**/*.svelte", "testing/**/*.ts"]
+	"include": ["src", "testing", "./*.config.ts"]
 }
