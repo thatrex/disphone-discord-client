@@ -2,7 +2,9 @@
 	"compilerOptions": {
 		"lib": ["DOM", "ESNext"],
 		"types": ["vite/client"],
-		"paths": { "@/*": ["./src/*"] },
+
+		"paths": { "@": ["./src/"], "@/*": ["./src/*"] },
+		"rootDirs": [".."],
 
 		"outDir": "build",
 		"target": "esnext",

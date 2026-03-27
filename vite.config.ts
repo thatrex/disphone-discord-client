@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		root: './testing/',
+		resolve: { tsconfigPaths: true },
 		plugins: [svelte({ preprocess: [vitePreprocess()], configFile: false }), mkcert()],
 	}
 })

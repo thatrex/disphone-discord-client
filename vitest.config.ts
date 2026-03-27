@@ -1,6 +1,6 @@
 import { loadEnv } from 'vite'
 import { defineConfig } from 'vitest/config'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte'
 import { playwright } from '@vitest/browser-playwright'
 import mkcert from 'vite-plugin-mkcert'
 
@@ -12,7 +12,8 @@ export default defineConfig(({ mode }) => {
 		throw Error('Missing required environment variable: VITE_DISCORD_TOKEN')
 
 	return {
-		plugins: [svelte(), mkcert()],
+		resolve: { tsconfigPaths: true },
+		plugins: [svelte({ preprocess: [vitePreprocess()], configFile: false }), mkcert()],
 		test: {
 			env,
 			browser: {
