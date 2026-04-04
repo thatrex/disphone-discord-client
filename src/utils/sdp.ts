@@ -3,11 +3,11 @@ export type ParsedSDP = [string, string][]
 export class SDP {
 	private sdp: ParsedSDP
 
-	public get parsed() {
+	public get parsed(): ParsedSDP {
 		return this.sdp
 	}
 
-	public get stringified() {
+	public get stringified(): string {
 		return this.stringify(this.sdp)
 	}
 
@@ -15,7 +15,7 @@ export class SDP {
 		this.sdp = !sdp ? [] : typeof sdp === 'string' ? this.pars(sdp) : sdp
 	}
 
-	private stringify(data: ParsedSDP) {
+	private stringify(data: ParsedSDP): string {
 		let sdp = ''
 		for (const [chr, val] of data) sdp += `${chr}=${val}\r\n`
 		return sdp.trim() + '\r\n'
@@ -27,21 +27,21 @@ export class SDP {
 			.replaceAll('\r', '')
 			.split('\n')
 			.map((line) => {
-				const chr = line.split('=')[0].trim()
+				const chr = line.split('=')[0]?.trim() ?? ''
 				const val = line.replace(`${chr}=`, '').trim()
 				return [chr, val]
 			})
 	}
 
-	public add(chr: string, val: string) {
+	public add(chr: string, val: string): void {
 		this.sdp = [...this.sdp, [chr.trim().charAt(0), val.trim()]]
 	}
 
-	public concat(sdp: ParsedSDP) {
+	public concat(sdp: ParsedSDP): void {
 		this.sdp = [...this.sdp, ...sdp]
 	}
 
-	public set(sdp: string | ParsedSDP) {
+	public set(sdp: string | ParsedSDP): void {
 		this.sdp = typeof sdp === 'string' ? this.pars(sdp) : sdp
 	}
 }

@@ -17,13 +17,12 @@ interface Client extends EventEmitter {
 
 class Client extends EventEmitter {
 	private _gateway: GatewaySocket
-	private _debug: boolean
 
-	public get gateway() {
+	public get gateway(): GatewaySocket {
 		return this._gateway
 	}
 
-	public get state() {
+	public get state(): SocketState {
 		return this.gateway.state
 	}
 
@@ -32,28 +31,25 @@ class Client extends EventEmitter {
 		intents: number
 		properties?: GatewayIdentifyProperties
 		presence?: GatewayPresenceUpdateData
-		debug?: boolean
 	}) {
 		super()
 
-		this._debug = params.debug ?? false
 		this._gateway = new GatewaySocket({
 			token: params.token,
 			intents: params.intents,
-			presence: params.presence,
-			properties: params.properties,
-			debug: this._debug,
+			presence: params.presence!,
+			properties: params.properties!,
 		})
 
 		this._gateway.on('state', (s) => this.emit('state', s))
 	}
 
-	public start() {
+	public start(): void {
 		this.gateway.init()
 	}
 
-	public setPresence(params: GatewayPresenceUpdateData) {
-		this._gateway.sendPacket({
+	public setPresence(params: GatewayPresenceUpdateData): void {
+		this._gateway.sendPayload({
 			op: GatewayOpcodes.PresenceUpdate,
 			d: params,
 		})
@@ -63,16 +59,15 @@ class Client extends EventEmitter {
 	public createVoiceManager(params: {
 		ac: AudioContext
 		audio_settings?: Partial<AudioSettings>
-	}) {
+	}): VoiceManager {
 		return new VoiceManager({
 			ac: params.ac,
 			gateway_socket: this._gateway,
-			debug: this._debug,
-			audio_settings: params.audio_settings,
+			audio_settings: params.audio_settings!,
 		})
 	}
 
-	public shutdown() {
+	public shutdown(): void {
 		this._gateway.destroy()
 	}
 }

@@ -54,7 +54,7 @@ export interface GatewayVoiceStateUpdateData {
 	/** Is the client deafened */
 	self_deaf: boolean
 	/** Undocumented: Is the client camera enable */
-	self_video: boolean
+	self_video?: boolean
 	/** Undocumented */
-	flags: number
+	flags?: number
 }

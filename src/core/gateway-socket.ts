@@ -1,25 +1,36 @@
 import EventEmitter from 'eventemitter3'
+import { GatewayIntentBits, GatewayVersion, PresenceUpdateStatus } from 'discord-api-types/v10'
+import { LogLevel, SocketState } from '@/types/common'
 import {
-	GatewayHeartbeat,
-	GatewayIdentify,
 	GatewayReceivePayload,
-	GatewayResume,
 	GatewayOpcodes,
-} from 'discord-api-types/gateway'
-import {
 	GatewayDispatchPayload,
 	GatewayIdentifyProperties,
 	GatewayPresenceUpdateData,
-	PresenceUpdateStatus,
 	GatewayDispatchEvents,
 	GatewayCloseCodes,
 	GatewaySendPayload,
-} from 'discord-api-types/v10'
-import { SocketState } from '../types/common'
-import { GatewaySocketError, GatewaySocketInitError, GatewaySocketNotReadyError } from './errors'
-import { wait } from '../utils/wait'
+} from '@/types/gateway'
+import { wait } from '@/utils/wait'
 
-const RECONNECTABLE_CLOSE_CODES = [
+export const DEFAULT_GATEWAY_ENDPOINT = 'gateway.discord.gg'
+
+export const DEFAULT_IDENTIFY_PROPERTIES = {
+	os: 'linux',
+	browser: '',
+	device: '',
+} as const satisfies GatewayIdentifyProperties
+
+export const DEFAULT_PRESENCE = {
+	since: null,
+	activities: [],
+	status: PresenceUpdateStatus.Online,
+	afk: false,
+} as const satisfies GatewayPresenceUpdateData
+
+const RESUME_ATTEMPT_LIMIT = 3
+
+const RESUMABLE_CLOSE_CODES = [
 	1005, // No Status Rcvd
 	1006, // Abnormal Closure
 	GatewayCloseCodes.UnknownError,
@@ -33,10 +44,17 @@ const RECONNECTABLE_CLOSE_CODES = [
 ] as const
 
 export interface GatewaySocket extends EventEmitter {
-	on(event: 'packet', listener: (packet: any) => void): this
-	on(event: 'state', listener: (state: SocketState) => void): this
-	emit(event: 'packet', packet: any): boolean
+	emit(event: ''): boolean
+	on(event: '', listener: () => void): this
+
+	emit(event: LogLevel, ...data: any[]): boolean
+	on(event: LogLevel, listener: (data: any[]) => void): this
+
 	emit(event: 'state', state: SocketState): boolean
+	on(event: 'state', listener: (state: SocketState) => void): this
+
+	emit(event: 'payload-json', payload: object): boolean
+	on(event: 'payload-json', listener: (payload: object) => void): this
 }
 
 export class GatewaySocket extends EventEmitter {
@@ -53,184 +71,180 @@ export class GatewaySocket extends EventEmitter {
 
 	private _state: SocketState = SocketState.INITIAL
 
-	public get state() {
+	public get state(): SocketState {
 		return this._state
 	}
 
-	private connection_data: {
-		token: string
-		initial_gateway_url: string
-		resume_gateway_url?: string
-		max_resume_attempts: number
-		session_id?: string
-		intents: number
+	private connection: {
 		properties: GatewayIdentifyProperties
-	} = {
-		token: '',
-		max_resume_attempts: 3,
-		initial_gateway_url: 'gateway.discord.gg',
-		intents: 0,
-		properties: {
-			os: 'linux',
-			browser: '',
-			device: '',
-		},
+		intents: GatewayIntentBits
+		token: string
+		session_id?: string
+		resume_gateway_endpoint?: string
 	}
 
-	private inital_presence: GatewayPresenceUpdateData = {
-		since: 0,
-		activities: [],
-		status: PresenceUpdateStatus.Online,
-		afk: false,
+	public get session_id(): string | undefined {
+		return this.connection.session_id
 	}
 
 	private _identity?: {
 		id: string
 		username: string
 		discriminator: string
-		user_bot: boolean
-	} = undefined
-
-	public get session_id() {
-		return this.connection_data.session_id
+		bot: boolean
 	}
 
-	public get identity() {
+	public get identity(): GatewaySocket['_identity'] {
 		return this._identity
 	}
 
-	private readonly debug?: (...args: any) => void
+	private presence: GatewayPresenceUpdateData
 
 	constructor(params: {
 		token: string
-		intents: number
+		intents: GatewayIntentBits
 		properties?: GatewayIdentifyProperties
 		presence?: GatewayPresenceUpdateData
-		max_resume_attempts?: number
-		initial_gateway_url?: string
-		debug?: boolean
 	}) {
 		super()
-		const {
+
+		const { token, intents, properties, presence } = params
+
+		this.presence = presence ?? DEFAULT_PRESENCE
+		this.connection = {
 			token,
 			intents,
-			properties,
-			presence,
-			max_resume_attempts,
-			initial_gateway_url,
-			debug,
-		} = params
+			properties: properties ?? DEFAULT_IDENTIFY_PROPERTIES,
+		}
 
-		this.debug = !debug ? undefined : (...args) => console.debug('[Gateway Socket]', ...args)
-
-		this.connection_data.token = token
-		this.connection_data.intents = intents
-		if (initial_gateway_url) this.connection_data.initial_gateway_url = initial_gateway_url
-		if (max_resume_attempts) this.connection_data.max_resume_attempts = max_resume_attempts
-		if (properties) this.connection_data.properties = properties
-		if (presence) this.inital_presence = presence
-
-		this.on('packet', (p) => this.onPacket(p))
+		this.on('payload-json', (p) => this.onJSON(p as GatewayReceivePayload))
 		this.on('state', (s) => {
 			this._state = s
-			this.debug?.(`State Update: ${s}`)
+			this.emit('debug', `State update: ${s}`)
 		})
 	}
 
-	public init() {
-		if (['INITIALISING', 'READY', 'RESUMING'].includes(this.state)) {
-			throw new GatewaySocketInitError(
-				'Socket State is either INITIALISING, READY or RESUMING.'
-			)
-		}
+	/*
+	PUBLIC
+	*/
 
-		this.emit('state', SocketState.INITIALISING)
-		this.openSocket(`wss://${this.connection_data.initial_gateway_url}/?v=10&encoding=json`)
+	public init(): void {
+		this.initSocket()
 	}
 
-	private openSocket(address: string) {
-		if (
-			this.ws &&
-			(this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
-		) {
-			throw new GatewaySocketError('Socket is already open or connecting.')
-		}
-
-		this.debug?.('Opening. Address:', address)
-
-		this.ws = new WebSocket(address)
-		this.ws.onmessage = (e) => this.onMessage(e)
-		this.ws.onopen = () => {
-			if (this.state !== SocketState.RESUMING) return
-
-			this.sendPacket({
-				op: GatewayOpcodes.Resume,
-				d: {
-					token: this.connection_data.token,
-					seq: this.last_sequence_number!,
-					session_id: this.connection_data.session_id!,
-				},
-			} satisfies GatewayResume)
-
-			this.resumed = false
-			setTimeout(() => {
-				if (!this.resumed) {
-					this.debug?.('Failed to resume. Destroying.')
-					this.destroy(true)
-				}
-			}, 2500)
-		}
-
-		this.ws.onclose = (e) => {
-			clearInterval(this.hartbeat_interval)
-			if (['DONE', 'FAILED'].includes(this.state)) return
-
-			if (this.state === SocketState.RESUMING) {
-				this.openSocket(`${this.connection_data.resume_gateway_url}/?v=10&encoding=json`)
-				return
-			}
-
-			if (RECONNECTABLE_CLOSE_CODES.includes(e.code)) {
-				this.doResume('Socket was closed with a reconnectable close code.')
-				return
-			}
-
-			this.destroy(e.code === GatewayCloseCodes.AuthenticationFailed)
-		}
-	}
-
-	private onMessage(e: MessageEvent<any>) {
-		try {
-			const packet = JSON.parse(e.data)
-			this.debug?.('Received Packet:', packet)
-			this.emit('packet', packet)
-		} catch (err) {
-			this.debug?.('Error Parsing Packet:', err)
-		}
-	}
-
-	public sendPacket(packet: GatewaySendPayload) {
+	public sendPayload(packet: GatewaySendPayload): void {
 		if (this.ws.readyState !== WebSocket.OPEN) {
-			throw new GatewaySocketNotReadyError('Unable to send packet.')
+			this.emit('error', 'Unable to send frame, socket not open.')
+			return
 		}
 
 		try {
-			this.debug?.('Sending Packet:', packet)
+			this.emit('debug', 'Sending packet:', packet)
 			this.ws.send(JSON.stringify(packet))
 		} catch (err) {
-			this.debug?.('Error Sending Packet:', err)
+			this.emit('error', 'Error sending packet:', err)
 		}
 	}
 
-	private onPacket(packet: GatewayReceivePayload) {
-		switch (packet.op) {
+	public destroy(failed?: boolean): void {
+		if (['DONE', 'FAILED'].includes(this.state)) return
+		this.emit('state', failed ? SocketState.FAILED : SocketState.DONE)
+		this.emit('debug', 'Destroying:', this.state)
+		this.ws.close(1_000)
+	}
+
+	/*
+	PRIVATE
+	*/
+
+	private initSocket(): void {
+		if (this.state !== SocketState.RESUMING) this.emit('state', SocketState.INITIALISING)
+
+		const endpoint =
+			this.state === SocketState.RESUMING
+				? this.connection.resume_gateway_endpoint
+				: undefined
+		const address = `wss://${endpoint ?? DEFAULT_GATEWAY_ENDPOINT}/?v=${GatewayVersion}`
+		const bad_ready_states = [WebSocket.CONNECTING, WebSocket.OPEN] as number[]
+
+		if (bad_ready_states.includes(this.ws?.readyState)) {
+			this.emit('error', 'Socket is already open or connecting.')
+			return
+		}
+
+		this.emit('debug', 'Initialising socket:', address)
+
+		this.ws = new WebSocket(address)
+		this.ws.binaryType = 'arraybuffer'
+		this.ws.onopen = (e): void => this.onWebSocketOpen(e)
+		this.ws.onclose = (e): void => this.onWebSocketClose(e)
+		this.ws.onmessage = (e): void => this.onWebSocketMessage(e)
+	}
+
+	private onWebSocketOpen(event: Event): void {
+		if (this.state !== SocketState.RESUMING) return
+
+		this.sendPayload({
+			op: GatewayOpcodes.Resume,
+			d: {
+				token: this.connection.token,
+				seq: this.last_sequence_number!,
+				session_id: this.connection.session_id!,
+			},
+		})
+
+		this.resumed = false
+		setTimeout(() => {
+			if (this.resumed) return
+			this.emit('debug', 'Failed to resume. Destroying.')
+			this.destroy(true)
+		}, 2500)
+	}
+
+	private onWebSocketClose({ code }: CloseEvent): void {
+		clearInterval(this.hartbeat_interval)
+		if (['DONE', 'FAILED'].includes(this.state)) return
+
+		if (this.state === SocketState.RESUMING) {
+			this.initSocket()
+			return
+		}
+
+		if (RESUMABLE_CLOSE_CODES.includes(code)) {
+			void this.attemptResume('Socket closed with resumable close code.')
+			return
+		}
+
+		this.destroy(code === GatewayCloseCodes.AuthenticationFailed)
+	}
+
+	private onWebSocketMessage({ data }: MessageEvent): void {
+		if (typeof data === 'string') {
+			try {
+				const parsed = JSON.parse(data) as object
+				this.emit('debug', 'Frame received:', parsed)
+				this.emit('payload-json', parsed)
+			} catch (error) {
+				this.emit('debug', 'Error parsing frame:', error)
+			}
+			return
+		}
+
+		if (data instanceof ArrayBuffer) {
+			this.emit('warn', 'Unexpected binary frame received.', data)
+			return
+		}
+	}
+
+	private onJSON(payload: GatewayReceivePayload): void {
+		switch (payload.op) {
 			case GatewayOpcodes.Heartbeat: {
 				this.sendHeartbeat()
 				break
 			}
 
 			case GatewayOpcodes.Hello: {
-				this.startHartbeat(packet.d.heartbeat_interval)
+				this.initHartbeat(payload.d.heartbeat_interval)
 				if (!this.indentified) this.sendIdentification()
 				break
 			}
@@ -241,125 +255,130 @@ export class GatewaySocket extends EventEmitter {
 			}
 
 			case GatewayOpcodes.InvalidSession: {
-				if (packet.d === true) this.doResume('Invalid Session Packet Received.')
+				if (payload.d === true) void this.attemptResume('Invalid session packet received.')
 				else this.destroy()
 				break
 			}
 
 			case GatewayOpcodes.Reconnect: {
-				this.doResume('Reconnect Packet Received')
+				void this.attemptResume('Reconnect packet received')
 				break
 			}
 
 			case GatewayOpcodes.Dispatch: {
-				this.onDispatch(packet)
+				this.onDispatch(payload)
 				break
 			}
 		}
 	}
 
-	private onDispatch(packet: GatewayDispatchPayload) {
+	private onDispatch(packet: GatewayDispatchPayload): void {
 		this.last_sequence_number = packet.s
 		switch (packet.t) {
 			case GatewayDispatchEvents.Ready: {
 				const {
-					resume_gateway_url,
 					session_id,
+					resume_gateway_url,
 					user: { id, username, discriminator, bot },
 				} = packet.d
 
-				this.connection_data.resume_gateway_url = resume_gateway_url
-				this.connection_data.session_id = session_id
-				this._identity = { id, username, discriminator, user_bot: !bot }
+				const resume_gateway_endpoint = resume_gateway_url.replace('wss://', '')
 
-				this.indentified = true
+				this.connection = { ...this.connection, session_id, resume_gateway_endpoint }
+				this._identity = { id, username, discriminator, bot: !!bot }
+
 				this.emit('state', SocketState.READY)
 				break
 			}
+
 			case GatewayDispatchEvents.Resumed: {
-				this.emit('state', SocketState.READY)
-				this.resume_attempts = 0
 				this.resumed = true
+				this.resume_attempts = 0
+
+				this.emit('state', SocketState.READY)
+				break
 			}
 		}
 	}
 
-	private sendHeartbeat() {
+	private sendHeartbeat(): void {
 		this.missed_heartbeats++
-		this.sendPacket({
+		this.sendPayload({
 			op: GatewayOpcodes.Heartbeat,
 			d: this.last_sequence_number,
-		} satisfies GatewayHeartbeat)
-	}
-
-	private startHartbeat(interval: number) {
-		this.debug?.('Starting Heartbeat')
-		this.missed_heartbeats = 0
-		interval = interval * Math.random()
-		clearInterval(this.hartbeat_interval)
-		this.hartbeat_interval = setInterval(() => {
-			if (this.missed_heartbeats > 2) {
-				if (this.state !== SocketState.RESUMING)
-					this.doResume('Too many missed heartbeats.')
-				return
-			}
-			this.sendHeartbeat()
-		}, interval)
-	}
-
-	private sendIdentification() {
-		this.debug?.('Sending Identification')
-
-		this.sendPacket({
-			op: GatewayOpcodes.Identify,
-			d: {
-				token: this.connection_data.token,
-				intents: this.connection_data.intents,
-				properties: this.connection_data.properties,
-			},
-		} satisfies GatewayIdentify)
-
-		this.sendPacket({
-			op: GatewayOpcodes.PresenceUpdate,
-			d: this.inital_presence,
 		})
 	}
 
-	private async doResume(reason: string) {
-		this.debug?.('Maybe Resuming. Reason:', reason)
+	private initHartbeat(interval: number): void {
+		this.emit('debug', 'Initialising heartbeat')
+		this.missed_heartbeats = 0
+		clearInterval(this.hartbeat_interval)
+		this.hartbeat_interval = window.setInterval(() => {
+			if (this.missed_heartbeats >= 3) {
+				if (this.state !== SocketState.READY) return
+				void this.attemptResume('Too many missed heartbeats.')
+				return
+			}
+			this.sendHeartbeat()
+		}, interval * Math.random())
+	}
 
-		const { max_resume_attempts, resume_gateway_url, session_id } = this.connection_data
+	private async attemptResume(reason: string): Promise<void> {
+		this.emit('debug', 'Maybe Resuming. Reason:', reason)
 
-		if (this.resume_attempts === max_resume_attempts) {
-			this.debug?.(`Max resume attempts (${max_resume_attempts}) reached.`)
+		if (this.resume_attempts >= RESUME_ATTEMPT_LIMIT) {
+			this.emit(
+				'debug',
+				`Resume attempt limit (${RESUME_ATTEMPT_LIMIT}) reached. Destroying.`
+			)
 			this.destroy(true)
 			return
 		}
 
-		if (!this.last_sequence_number || !resume_gateway_url || !session_id) {
-			this.debug?.('Lacking necessary data to resume.')
+		if (!this.connection.session_id) {
+			this.emit('debug', 'Data required for resume unavailable.')
 			this.destroy(true)
 			return
 		}
 
 		this.resume_attempts++
-		if (this.state !== SocketState.RESUMING) {
-			this.emit('state', SocketState.RESUMING)
-		} else {
+
+		if (this.state === SocketState.RESUMING) {
 			await wait(1000 * this.resume_attempts)
+			if (this.state !== SocketState.RESUMING) return
+		} else {
+			this.emit('state', SocketState.RESUMING)
 		}
 
-		this.debug?.('Resuming')
+		const acceptable_ready_states = [WebSocket.CLOSED, WebSocket.CLOSING] as number[]
 
-		if (this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
-			this.openSocket(`${resume_gateway_url}/?v=10&encoding=json`)
-		} else this.ws.close()
+		if (acceptable_ready_states.includes(this.ws.readyState)) {
+			this.emit('debug', 'Resuming')
+			this.initSocket()
+			return
+		}
+
+		this.ws.close()
 	}
 
-	public destroy(failed?: boolean) {
-		if (['DONE', 'FAILED'].includes(this.state)) return
-		this.emit('state', failed ? SocketState.FAILED : SocketState.DONE)
-		this.debug?.('Destroying. Reason:', this.state)
-		this.ws.close(1_000)
+	private sendIdentification(): void {
+		this.emit('debug', 'Sending Identification')
+
+		this.indentified = true
+		this.sendPayload({
+			op: GatewayOpcodes.Identify,
+			d: {
+				token: this.connection.token,
+				intents: this.connection.intents,
+				properties: this.connection.properties,
+				// presence: this.presence, 
+				// ^ initial presence not respected
+			},
+		})
+
+		this.sendPayload({
+			op: GatewayOpcodes.PresenceUpdate,
+			d: this.presence,
+		})
 	}
 }

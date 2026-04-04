@@ -1,8 +1,14 @@
 import EventEmitter from 'eventemitter3'
-import { AudioSettings } from '../types/common'
-import { VoiceRTCConnectionError, VoiceRTCOfferError } from './errors'
-import { createPlaceholderStream } from '../utils/create-placeholder-stream'
-import { SDP } from '../utils/sdp'
+import { AudioSettings, LogLevel } from '@/types/common'
+import { createPlaceholderStream } from '@/utils/create-placeholder-stream'
+import { SDP } from '@/utils/sdp'
+import { Codecs } from '@/types/voice'
+
+const DEFAULT_AUDIO_SETTINGS = {
+	stereo: false,
+	bitrate_kbps: 64,
+	mode: 'sendonly',
+} as const satisfies AudioSettings
 
 export type ReceiverToDo = keyof typeof ReceiverToDo
 export const ReceiverToDo = {
@@ -34,10 +40,14 @@ export type Receiver = (
 }
 
 export interface VoiceRTC extends EventEmitter {
-	on(event: 'state', listener: (state: RTCPeerConnectionState) => void): this
-	on(event: '', listener: () => void): this
-	emit(event: 'state', state: RTCPeerConnectionState): boolean
 	emit(event: ''): boolean
+	on(event: '', listener: () => void): this
+
+	emit(event: LogLevel, ...data: any[]): boolean
+	on(event: LogLevel, listener: (data: any[]) => void): this
+
+	emit(event: 'state', state: RTCPeerConnectionState): boolean
+	on(event: 'state', listener: (state: RTCPeerConnectionState) => void): this
 }
 
 export class VoiceRTC extends EventEmitter {
@@ -46,96 +56,70 @@ export class VoiceRTC extends EventEmitter {
 	private readonly dst_o: MediaStreamAudioDestinationNode
 	private readonly src_o: MediaStreamAudioSourceNode
 
-	public get dst() {
+	public get dst(): MediaStreamAudioDestinationNode {
 		return this.dst_i
 	}
 
-	public get src() {
+	public get src(): MediaStreamAudioSourceNode {
 		return this.src_o
 	}
 
 	private pc: RTCPeerConnection
-	private audio_settings?: AudioSettings
+	private audio_settings: AudioSettings
 	private discord_sdp?: string
 	private processing = false
 	private transceivers: Transceiver[] = []
 
-	get state() {
+	get state(): RTCPeerConnectionState {
 		return this.pc.connectionState
 	}
 
-	private readonly debug?: (...args: any) => void
-
-	constructor(params: { ac: AudioContext; debug?: boolean }) {
+	constructor(params: { ac: AudioContext; audio_settings?: Partial<AudioSettings> }) {
 		super()
-		this.debug = !params.debug ? undefined : (...args) => console.debug(`[Voice RTC]`, ...args)
 
 		this.ac = params.ac
+		this.audio_settings = { ...DEFAULT_AUDIO_SETTINGS, ...params.audio_settings }
 		this.dst_i = this.ac.createMediaStreamDestination()
 		this.dst_o = this.ac.createMediaStreamDestination()
 		this.src_o = this.ac.createMediaStreamSource(this.dst_o.stream)
 
-		this.on('state', (s) => this.debug?.('State Update:', s))
-		this.pc = new RTCPeerConnection({ bundlePolicy: 'max-bundle' })
-		this.pc.onconnectionstatechange = () => this.emit('state', this.pc.connectionState)
+		this.on('state', (s) => this.emit('debug', 'State update:', s))
+		this.pc = new RTCPeerConnection()
+		this.pc.onconnectionstatechange = (): void =>
+			void this.emit('state', this.pc.connectionState)
+
+		const [dummy_track] = createPlaceholderStream(this.ac).getAudioTracks()
+		const transceiver = this.pc.addTransceiver(dummy_track!, { direction: 'sendonly' })
+		const [track_i] = this.dst_i.stream.getAudioTracks()
+		void transceiver.sender.replaceTrack(track_i!)
+
+		this.transceivers.push({ type: TransceiverType.SENDER, transceiver })
 	}
 
-	private buildSelectProtocolSDP(sdp: string) {
-		const s = new SDP(sdp.split('m=', 2).join('m=').trim())
-		const attributes = ['fingerprint', 'ice-', 'extmap', 'rtpmap']
-		s.set(s.parsed.filter(([, v]) => attributes.filter((a) => v.includes(a)).length))
-		const select_protocol_sdp = s.stringified.trim().replaceAll('\r', '')
-		this.debug?.(`Select Protocol SDP:\n${select_protocol_sdp}`)
-		return select_protocol_sdp
-	}
+	/*
+	PUBLIC
+	*/
 
-	private async createOffer() {
-		const offer = await this.pc.createOffer()
-		if (!offer.sdp) throw new VoiceRTCOfferError('SDP was not created.')
-		this.debug?.(`SDP Offer:\n${offer.sdp}`)
-		return offer.sdp
-	}
-
-	private getNonStoppedReceiver(user_id: string) {
-		const index = this.transceivers.findIndex((t) => {
-			if (t.type === TransceiverType.SENDER) return false
-			else return t.user_id === user_id && !t.transceiver?.stopped
-		})
-
-		return this.transceivers[index] as Receiver | undefined
-	}
-
-	public setDiscordSDP(sdp: string) {
-		this.debug?.(`SDP Discord Raw:\n${sdp}`)
-		this.discord_sdp = sdp
-		this.processReceivers()
-	}
-
-	/** Inits the connection. */
-	public async init(params: { audio_settings: AudioSettings }) {
+	/** Init the connection. */
+	public async initConnection(): Promise<void | {
+		ssrc: number
+		select_protocol_sdp: string
+		codecs: Codecs
+	}> {
 		if (this.pc.connectionState !== 'new') {
-			throw new VoiceRTCConnectionError('Peer Connection has already been initiated.')
+			this.emit('error', 'Peer Connection has already been initiated.')
+			return
 		}
 
-		this.debug?.('Initiating')
-
-		this.audio_settings = params.audio_settings
-		const [dummy_track] = createPlaceholderStream(this.ac).getAudioTracks()
-		const transceiver = this.pc.addTransceiver(dummy_track, { direction: 'sendonly' })
-		const [track_i] = this.dst_i.stream.getAudioTracks()
-		transceiver.sender.replaceTrack(track_i)
-
-		this.transceivers.push({
-			type: TransceiverType.SENDER,
-			transceiver,
-		})
+		this.emit('debug', 'Initiating')
 
 		const sdp = await this.createOffer()
+		if (!sdp) return
 		await this.pc.setLocalDescription({ type: 'offer', sdp })
 
-		const select_protocol_sdp = this.buildSelectProtocolSDP(sdp)
-		const payload_type = Number(sdp.match(/a=rtpmap:(\d+) opus/)![1])
 		const ssrc = Number(sdp.match(/a=ssrc:(\d+) cname/)![1])
+		const payload_type = Number(sdp.match(/a=rtpmap:(\d+) opus/)![1])
+		const select_protocol_sdp = this.buildSelectProtocolSDP(sdp)
 
 		return {
 			ssrc,
@@ -152,9 +136,15 @@ export class VoiceRTC extends EventEmitter {
 		}
 	}
 
+	public setDiscordSDP(sdp: string): void {
+		this.emit('debug', `SDP Discord Raw:\n${sdp}`)
+		this.discord_sdp = sdp
+		void this.processReceivers()
+	}
+
 	/** Add user audio receiver if no active user receiver is found. */
-	public addUserAudioReceiver(user_id: string, ssrc: number) {
-		if (this.audio_settings?.mode === 'sendonly') return
+	public addUserAudioReceiver(user_id: string, ssrc: number): void {
+		if (this.audio_settings.mode === 'sendonly') return
 
 		const receiver = this.getNonStoppedReceiver(user_id)
 
@@ -166,7 +156,7 @@ export class VoiceRTC extends EventEmitter {
 				todo: ReceiverToDo.ADD,
 			})
 
-			this.processReceivers()
+			void this.processReceivers()
 			return
 		}
 
@@ -176,7 +166,7 @@ export class VoiceRTC extends EventEmitter {
 	}
 
 	/** Stop active user receiver. */
-	public stopUserAudioReceiver(user_id: string) {
+	public stopUserAudioReceiver(user_id: string): void {
 		if (this.audio_settings?.mode === 'sendonly') return
 
 		const receiver = this.getNonStoppedReceiver(user_id)
@@ -189,13 +179,53 @@ export class VoiceRTC extends EventEmitter {
 		}
 
 		receiver.todo = ReceiverToDo.REMOVE
-		this.processReceivers()
+		void this.processReceivers()
 	}
 
-	private async processReceivers() {
+	/** Stop all transceivers and closes connection. */
+	public close(): void {
+		if (this.pc.connectionState === 'closed') return
+		this.emit('debug', 'Closing')
+		for (const transceiver of this.pc.getTransceivers()) transceiver.stop()
+		this.pc.close()
+	}
+
+	/*
+	PRIVATE
+	*/
+
+	private buildSelectProtocolSDP(sdp: string): string {
+		const s = new SDP(sdp.split('m=', 2).join('m=').trim())
+		const attributes = ['fingerprint', 'ice-', 'extmap', 'rtpmap']
+		s.set(s.parsed.filter(([, v]) => attributes.filter((a) => v.includes(a)).length))
+		const select_protocol_sdp = s.stringified.trim().replaceAll('\r', '')
+		this.emit('debug', `Select Protocol SDP:\n${select_protocol_sdp}`)
+		return select_protocol_sdp
+	}
+
+	private async createOffer(): Promise<string | void> {
+		const offer = await this.pc.createOffer()
+		if (!offer.sdp) {
+			this.emit('debug', 'Failed to create SDP offer.')
+			return
+		}
+		this.emit('debug', `SDP Offer:\n${offer.sdp}`)
+		return offer.sdp
+	}
+
+	private getNonStoppedReceiver(user_id: string): Receiver | undefined {
+		const index = this.transceivers.findIndex((t) => {
+			if (t.type === TransceiverType.SENDER) return false
+			else return t.user_id === user_id && !t.transceiver?.stopped
+		})
+
+		return this.transceivers[index] as Receiver | undefined
+	}
+
+	private async processReceivers(): Promise<void> {
 		if (this.processing || !this.discord_sdp) return
 
-		this.debug?.('Processing Started')
+		this.emit('debug', 'Processing Started')
 		this.processing = true
 
 		for (const t of this.transceivers) {
@@ -236,16 +266,17 @@ export class VoiceRTC extends EventEmitter {
 		this.processing = false
 
 		if (continueProcessing) {
-			this.debug?.(`Processing Continuing`)
+			this.emit('debug', `Processing Continuing`)
 			await this.processReceivers()
 			return
 		}
 
-		this.debug?.(`Processing Done\ntransceivers:`, this.transceivers)
+		this.emit('debug', `Processing Done\ntransceivers:`, this.transceivers)
 	}
 
-	private async updatePeerConnection(discord_sdp: string) {
+	private async updatePeerConnection(discord_sdp: string): Promise<void> {
 		const offer_sdp = await this.createOffer()
+		if (!offer_sdp) return
 		await this.pc.setLocalDescription({ type: 'offer', sdp: offer_sdp })
 
 		const remote_sdp = new SDP()
@@ -253,6 +284,7 @@ export class VoiceRTC extends EventEmitter {
 			const section = new SDP(i === 0 ? s : `m=${s}`)
 			const parsed_section = new SDP()
 
+			// TODO: make this safe
 			const [, in_ip4, rtcp, ice_ufrag, ice_pwd, fingerprint, candidate] = discord_sdp
 				.replaceAll('\n\r', '\n')
 				.split('\n')
@@ -261,7 +293,7 @@ export class VoiceRTC extends EventEmitter {
 			if (i === 0) {
 				for (const [chr, val] of section.parsed) {
 					if (val.startsWith('fingerprint')) {
-						parsed_section.add(chr, fingerprint)
+						parsed_section.add(chr, fingerprint!)
 						continue
 					}
 
@@ -283,12 +315,12 @@ export class VoiceRTC extends EventEmitter {
 			const transceiver = this.transceivers.find(
 				({ transceiver }) => transceiver?.mid === mid
 			)!
-			const rtcp_num = rtcp.split(':')[1]
+			const rtcp_num = rtcp!.split(':')[1]
 
 			for (const [chr, val] of section.parsed) {
 				if (i === 1 && val.startsWith(`fmtp:${payload_type}`)) {
-					const bitrate = this.audio_settings!.bitrate_kbps * 1_000
-					const stereo = this.audio_settings!.stereo ? 1 : 0
+					const bitrate = this.audio_settings.bitrate_kbps * 1_000
+					const stereo = this.audio_settings.stereo ? 1 : 0
 					const v = `fmtp:${payload_type} minptime=10;useinbandfec=1;usedtx=1;stereo=${stereo};maxaveragebitrate=${bitrate}`
 					parsed_section.add(chr, v)
 				}
@@ -304,22 +336,22 @@ export class VoiceRTC extends EventEmitter {
 				}
 
 				if (chr === 'c') {
-					parsed_section.add(chr, in_ip4)
+					parsed_section.add(chr, in_ip4!)
 					continue
 				}
 
 				if (val.startsWith('fingerprint')) {
-					parsed_section.add(chr, fingerprint)
+					parsed_section.add(chr, fingerprint!)
 					continue
 				}
 
 				if (val.startsWith('ice-ufrag')) {
-					parsed_section.add(chr, ice_ufrag)
+					parsed_section.add(chr, ice_ufrag!)
 					continue
 				}
 
 				if (val.startsWith('ice-pwd')) {
-					parsed_section.add(chr, ice_pwd)
+					parsed_section.add(chr, ice_pwd!)
 					continue
 				}
 
@@ -347,7 +379,7 @@ export class VoiceRTC extends EventEmitter {
 			}
 
 			parsed_section.add('a', `rtcp:${rtcp_num}`)
-			parsed_section.add('a', candidate)
+			parsed_section.add('a', candidate!)
 
 			if (transceiver.type === TransceiverType.RECEIVER) {
 				const { user_id, ssrc } = transceiver
@@ -358,15 +390,7 @@ export class VoiceRTC extends EventEmitter {
 			remote_sdp.concat(parsed_section.parsed)
 		}
 
-		this.debug?.(`SDP Answer Parsed:\n${remote_sdp.stringified}`)
+		this.emit('debug', `SDP Answer Parsed:\n${remote_sdp.stringified}`)
 		await this.pc.setRemoteDescription({ type: 'answer', sdp: remote_sdp.stringified })
-	}
-
-	/** Stop all transceivers and closes connection. */
-	public close() {
-		if (this.pc.connectionState === 'closed') return
-		this.debug?.('Closing')
-		for (const transceiver of this.pc.getTransceivers()) transceiver.stop()
-		this.pc.close()
 	}
 }

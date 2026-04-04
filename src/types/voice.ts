@@ -63,9 +63,9 @@ export type VoiceIdentifyData = {
 	/** The maximum DAVE protocol version supported */
 	max_dave_protocol_version?: number
 	/** Undocumented: ?? If the client has video capabilities */
-	video: boolean
+	video?: boolean
 	/** Undocumented */
-	streams: {
+	streams?: {
 		type: string
 		rid: string
 		quality: number
@@ -111,8 +111,7 @@ export type VoiceReadyData = {
 	/** UDP port */
 	port: number
 	/** Supported encryption modes
-	 * @see {@link https://discord.com/developers/docs/topics/voice-connections#transport-encryption-modes}
-	 */
+	 * @see {@link https://discord.com/developers/docs/topics/voice-connections#transport-encryption-modes} */
 	modes: string[]
 	/** Undocumented: Audio streams */
 	streams: {
@@ -133,8 +132,7 @@ export type VoiceSessionDescription = _DataPayload<
 /** Undocumented: The WebRTC session description data is almost completely diffrent to that of UDP */
 export type VoiceSessionDescriptionData = {
 	/** The selected DAVE protocol version
-	 * @see {@link https://daveprotocol.com/#select_protocol_ack-4}
-	 */
+	 * @see {@link https://daveprotocol.com/#select_protocol_ack-4} */
 	dave_protocol_version: number
 	media_session_id: string
 	video_codec: string

@@ -1,2 +1,2 @@
 /** No operation function. */
-export const noop = () => {}
+export const noop = (): void => {}

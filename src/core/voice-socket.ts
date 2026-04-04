@@ -1,12 +1,20 @@
 import EventEmitter from 'eventemitter3'
-import { GatewayCloseCodes } from 'discord-api-types/v10'
-import { VoiceCloseCodes, VoiceOpcodes } from 'discord-api-types/voice'
-import { SocketState } from '../types/common'
-import { Codecs, VoiceReceivePayload } from '../types/voice'
-import { VoiceSocketError, VoiceSocketNotReadyError } from './errors'
-import { wait } from '../utils/wait'
+import { GatewayCloseCodes } from '@/types/gateway'
+import { LogLevel, SocketState } from '@/types/common'
+import {
+	Codecs,
+	VoiceCloseCodes,
+	VoiceOpcodes,
+	VoiceReceivePayload,
+	VoiceGatewayVersion,
+	VoiceSendPayload,
+} from '@/types/voice'
+import { wait } from '@/utils/wait'
+import * as Davey from '@snazzah/davey'
 
-const RECONNECTABLE_CLOSE_CODES = [
+const RESUME_ATTEMPT_LIMIT = 3
+
+const RESUMABLE_CLOSE_CODES = [
 	1005, // No Status Rcvd
 	1006, // Abnormal Closure
 	GatewayCloseCodes.UnknownError,
@@ -19,10 +27,20 @@ const RECONNECTABLE_CLOSE_CODES = [
 ] as const
 
 export interface VoiceSocket extends EventEmitter {
-	on(event: 'packet', listener: (packet: any) => void): this
-	on(event: 'state', listener: (state: SocketState) => void): this
-	emit(event: 'packet', packet: any): boolean
+	emit(event: ''): boolean
+	on(event: '', listener: () => void): this
+
+	emit(event: LogLevel, ...data: any[]): boolean
+	on(event: LogLevel, listener: (data: any[]) => void): this
+
 	emit(event: 'state', state: SocketState): boolean
+	on(event: 'state', listener: (state: SocketState) => void): this
+
+	emit(event: 'payload-json', frame: object): boolean
+	on(event: 'payload-json', listener: (frame: object) => void): this
+
+	emit(event: 'payload-binary', frame: ArrayBuffer): boolean
+	on(event: 'payload-binary', listener: (frame: ArrayBuffer) => void): this
 }
 
 export class VoiceSocket extends EventEmitter {
@@ -38,134 +56,162 @@ export class VoiceSocket extends EventEmitter {
 
 	private _state: SocketState = SocketState.INITIAL
 
-	public get state() {
+	public get state(): SocketState {
 		return this._state
 	}
 
-	private connection_data: {
+	private connection: {
+		session_id: string
+		endpoint: string
+		token: string
 		guild_id: string
 		user_id: string
-		session_id: string
-		token: string
-		address: string
 	}
 
-	private readonly debug?: (...args: any) => void
-
 	constructor(params: {
-		address: string
+		session_id: string
+		endpoint: string
+		token: string
 		guild_id: string
 		user_id: string
-		session_id: string
-		token: string
-		debug?: boolean
 	}) {
 		super()
 
-		this.debug = !params.debug
-			? undefined
-			: (...args) => console.debug(`[Voice Socket]`, ...args)
+		this.connection = params
 
-		this.connection_data = {
-			guild_id: params.guild_id,
-			session_id: params.session_id,
-			token: params.token,
-			user_id: params.user_id,
-			address: params.address,
-		}
-
-		this.on('packet', (p) => this.onPacket(p))
+		this.on('payload-binary', (b) => b) // TODO
+		this.on('payload-json', (d) => this.onJSON(d as VoiceReceivePayload))
 		this.on('state', (s) => {
 			this._state = s
-			this.debug?.(`State Update: ${s}`)
+			this.emit('debug', `State update: ${s}`)
 		})
-
-		this.emit('state', SocketState.INITIALISING)
-		this.openSocket(`wss://${params.address}/?v=8`)
 	}
 
-	private openSocket(address: string) {
-		if (
-			this.ws &&
-			(this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
-		) {
-			throw new VoiceSocketError('Socket is already open or connecting.')
-		}
+	/*
+	PUBLIC
+	*/
 
-		this.debug?.('Opening. Address:', address)
-
-		this.ws = new WebSocket(address)
-		this.ws.onmessage = (e) => this.onMessage(e)
-		this.ws.onopen = () => {
-			if (this.state !== SocketState.RESUMING) return
-
-			const { guild_id: server_id, session_id, token } = this.connection_data
-
-			this.sendPacket({
-				op: VoiceOpcodes.Resume,
-				d: {
-					server_id,
-					session_id,
-					token,
-				},
-			})
-
-			this.resumed = false
-			setTimeout(() => {
-				if (!this.resumed) {
-					this.debug?.('Failed to resume. Destroying.')
-					this.destroy(true)
-				}
-			}, 2500)
-		}
-
-		this.ws.onclose = (e) => {
-			clearInterval(this.hartbeat_interval)
-			if (['DONE', 'FAILED'].includes(this.state)) return
-
-			if (this.state === SocketState.RESUMING) {
-				this.openSocket(`wss://${this.connection_data.address}/?v=8`)
-				return
-			}
-
-			if (RECONNECTABLE_CLOSE_CODES.includes(e.code)) {
-				this.doResume('Socket was closed with a reconnectable close code.')
-				return
-			}
-
-			this.destroy()
-		}
+	public init(): void {
+		this.initSocket()
 	}
 
-	private onMessage(e: MessageEvent<any>) {
-		try {
-			const packet = JSON.parse(e.data)
-			this.debug?.('Received Packet:', packet)
-			this.emit('packet', packet)
-		} catch (err) {
-			this.debug?.('Error Parsing Packet:', err)
-		}
-	}
-
-	public sendPacket(packet: { op: number; d: any }) {
+	public sendPayload(packet: VoiceSendPayload): void {
 		if (this.ws.readyState !== WebSocket.OPEN) {
-			throw new VoiceSocketNotReadyError(
-				`Unable to send packet. Packet: ${JSON.stringify(packet)}`
-			)
+			this.emit('error', 'Unable to send frame, socket not open.')
+			return
 		}
 
 		try {
-			this.debug?.('Sending Packet:', packet)
+			this.emit('debug', 'Sending packet:', packet)
 			this.ws.send(JSON.stringify(packet))
 		} catch (err) {
-			this.debug?.('Error Sending Packet:', err)
+			this.emit('error', 'Error sending packet:', err)
 		}
 	}
 
-	private onPacket(packet: VoiceReceivePayload) {
-		switch (packet.op) {
+	public sendSelectProtocol(sdp: string, codecs: Codecs): void {
+		this.emit('debug', 'Selecting protocol')
+		this.sendPayload({
+			op: VoiceOpcodes.SelectProtocol,
+			d: {
+				protocol: 'webrtc',
+				data: sdp,
+				sdp: sdp,
+				codecs,
+			},
+		})
+	}
+
+	public destroy(failed?: boolean): void {
+		if (['DONE', 'FAILED'].includes(this.state)) return
+		this.emit('state', failed ? SocketState.FAILED : SocketState.DONE)
+		this.emit('debug', 'Destroying:', this.state)
+		this.ws.close(1_000)
+	}
+
+	/*
+	PRIVATE
+	*/
+
+	private initSocket(): void {
+		if (this.state !== SocketState.RESUMING) this.emit('state', SocketState.INITIALISING)
+
+		const address = `wss://${this.connection.endpoint}/?v=${VoiceGatewayVersion}`
+		const bad_ready_states = [WebSocket.CONNECTING, WebSocket.OPEN] as number[]
+
+		if (bad_ready_states.includes(this.ws?.readyState)) {
+			this.emit('error', 'Socket is already open or connecting.')
+			return
+		}
+
+		this.emit('debug', 'Initialising socket:', address)
+
+		this.ws = new WebSocket(address)
+		this.ws.binaryType = 'arraybuffer'
+		this.ws.onopen = (e): void => this.onWebSocketOpen(e)
+		this.ws.onclose = (e): void => this.onWebSocketClose(e)
+		this.ws.onmessage = (e): void => this.onWebSocketMessage(e)
+	}
+
+	private onWebSocketOpen(event: Event): void {
+		if (this.state !== SocketState.RESUMING) return
+
+		const { guild_id: server_id, session_id, token } = this.connection
+
+		this.sendPayload({
+			op: VoiceOpcodes.Resume,
+			// TODO: something with seq_ack
+			d: { server_id, session_id, token, seq_ack: 1 },
+		})
+
+		this.resumed = false
+		setTimeout(() => {
+			if (this.resumed) return
+			this.emit('debug', 'Failed to resume. Destroying.')
+			this.destroy(true)
+		}, 2500)
+	}
+
+	private onWebSocketClose({ code }: CloseEvent): void {
+		clearInterval(this.hartbeat_interval)
+		if (['DONE', 'FAILED'].includes(this.state)) return
+
+		if (this.state === SocketState.RESUMING) {
+			this.initSocket()
+			return
+		}
+
+		if (RESUMABLE_CLOSE_CODES.includes(code)) {
+			void this.attemptResume('Socket closed with resumable close code.')
+			return
+		}
+
+		this.destroy()
+	}
+
+	private onWebSocketMessage({ data }: MessageEvent): void {
+		if (typeof data === 'string') {
+			try {
+				const parsed = JSON.parse(data) as object
+				this.emit('debug', 'Frame Received:', parsed)
+				this.emit('payload-json', parsed)
+			} catch (error) {
+				this.emit('debug', 'Error Parsing Frame:', error)
+			}
+			return
+		}
+
+		if (data instanceof ArrayBuffer) {
+			this.emit('debug', 'Frame Received:', data)
+			this.emit('payload-binary', data)
+			return
+		}
+	}
+
+	private onJSON(payload: VoiceReceivePayload): void {
+		switch (payload.op) {
 			case VoiceOpcodes.Hello: {
-				this.startHartbeat(packet.d.heartbeat_interval)
+				this.initHartbeat(payload.d.heartbeat_interval)
 				if (!this.indentified) this.sendIdentification()
 				break
 			}
@@ -189,85 +235,73 @@ export class VoiceSocket extends EventEmitter {
 		}
 	}
 
-	private sendHeartbeat() {
+	private sendHeartbeat(): void {
 		this.missed_heartbeats++
-		this.sendPacket({
+		this.sendPayload({
 			op: VoiceOpcodes.Heartbeat,
-			d: Math.floor(Math.random() * 100_000_000_000),
+			// TODO: something with seq_ack
+			d: { t: Math.floor(Math.random() * 100_000_000_000), seq_ack: 1 },
 		})
 	}
 
-	private startHartbeat(interval: number) {
-		this.debug?.('Starting Heartbeat')
+	private initHartbeat(interval: number): void {
+		this.emit('debug', 'Initialising heartbeat')
 		clearInterval(this.hartbeat_interval)
-		this.hartbeat_interval = setInterval(() => {
-			if (this.missed_heartbeats > 2) {
-				if (this.state === SocketState.READY) this.doResume('Too many missed heartbeats.')
+		this.hartbeat_interval = window.setInterval(() => {
+			if (this.missed_heartbeats >= 3) {
+				if (this.state !== SocketState.READY) return
+				void this.attemptResume('Too many missed heartbeats.')
 				return
 			}
 			this.sendHeartbeat()
 		}, interval)
 	}
 
-	private async doResume(reason: string) {
-		this.debug?.('Maybe Resuming. Reason:', reason)
+	private async attemptResume(reason: string): Promise<void> {
+		this.emit('debug', 'Attempting resume:', reason)
 
-		if (this.resume_attempts === 3) {
-			this.debug?.(`Max resume attempts (3) reached. Destroying.`)
-			this.destroy()
+		if (this.resume_attempts >= RESUME_ATTEMPT_LIMIT) {
+			this.emit(
+				'debug',
+				`Resume attempt limit (${RESUME_ATTEMPT_LIMIT}) reached. Destroying.`
+			)
+			this.destroy(true)
 			return
 		}
 
 		this.resume_attempts++
-		if (this.state !== SocketState.RESUMING) {
-			this.emit('state', SocketState.RESUMING)
-		} else {
+
+		if (this.state === SocketState.RESUMING) {
 			await wait(1000 * this.resume_attempts)
 			if (this.state !== SocketState.RESUMING) return
+		} else {
+			this.emit('state', SocketState.RESUMING)
 		}
 
-		this.debug?.('Resuming')
+		const acceptable_ready_states = [WebSocket.CLOSED, WebSocket.CLOSING] as number[]
 
-		if (this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
-			this.openSocket(`wss://${this.connection_data.address}/?v=8`)
-		} else this.ws.close()
+		if (acceptable_ready_states.includes(this.ws.readyState)) {
+			this.emit('debug', 'Resuming')
+			this.initSocket()
+			return
+		}
+
+		this.ws.close()
 	}
 
-	private sendIdentification() {
-		this.debug?.('Sending Identification')
-		const { guild_id: server_id, session_id, token, user_id } = this.connection_data
-		this.sendPacket({
+	private sendIdentification(): void {
+		this.emit('debug', 'Sending identification')
+
+		this.indentified = true
+		this.sendPayload({
 			op: VoiceOpcodes.Identify,
 			d: {
-				server_id,
-				user_id,
-				session_id,
-				token,
-				video: false,
-				max_dave_protocol_version: 1,
+				token: this.connection.token,
+				session_id: this.connection.session_id,
+				user_id: this.connection.user_id,
+				server_id: this.connection.guild_id,
+				max_dave_protocol_version: Davey.DAVE_PROTOCOL_VERSION,
 			},
 		})
-		this.indentified = true
-	}
-
-	public sendSelectProtocol(sdp: string, codecs: Codecs) {
-		this.debug?.('Selecting Protocol')
-		this.sendPacket({
-			op: VoiceOpcodes.SelectProtocol,
-			d: {
-				protocol: 'webrtc',
-				data: sdp,
-				sdp: sdp,
-				codecs,
-			},
-		})
-	}
-
-	public destroy(failed?: boolean) {
-		if (['DONE', 'FAILED'].includes(this.state)) return
-		this._state = failed ? SocketState.FAILED : SocketState.DONE
-		this.emit('state', this.state)
-		this.debug?.('Destroying. Reason:', this.state)
-		this.ws.close(1_000)
 	}
 }

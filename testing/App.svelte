@@ -7,7 +7,6 @@
 
 	const c = new Client({
 		token: import.meta.env.VITE_DISCORD_TOKEN,
-		debug: true,
 		intents: GatewayIntentBits.GuildVoiceStates,
 	})
 
@@ -40,14 +39,14 @@
 	>
 		Start
 	</button>
-	<button onclick={async () => c.shutdown()}>Stop</button>
+	<button onclick={() => c.shutdown()}>Stop</button>
 </section>
 
 <section>
 	<h1>Voice</h1>
 	<button
 		disabled={!ready}
-		onclick={async () => {
+		onclick={() => {
 			vm.update({
 				speaking: true,
 				self_deaf: false,
@@ -59,5 +58,5 @@
 	>
 		Join
 	</button>
-	<button disabled={!ready} onclick={async () => vm.update({ channel_id: null })}>Leave</button>
+	<button disabled={!ready} onclick={() => vm.update({ channel_id: null })}>Leave</button>
 </section>
