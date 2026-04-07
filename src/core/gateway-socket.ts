@@ -1,6 +1,6 @@
 import EventEmitter from 'eventemitter3'
 import { GatewayIntentBits, GatewayVersion, PresenceUpdateStatus } from 'discord-api-types/v10'
-import { LogLevel, SocketState } from '@/types/common'
+import { LogLevel, SocketState, WebSocketCloseCodes } from '@/types/common'
 import {
 	GatewayReceivePayload,
 	GatewayOpcodes,
@@ -31,8 +31,8 @@ export const DEFAULT_PRESENCE = {
 const RESUME_ATTEMPT_LIMIT = 3
 
 const RESUMABLE_CLOSE_CODES = [
-	1005, // No Status Rcvd
-	1006, // Abnormal Closure
+	WebSocketCloseCodes.NoStatusReceived,
+	WebSocketCloseCodes.AbnormalClosure,
 	GatewayCloseCodes.UnknownError,
 	GatewayCloseCodes.UnknownOpcode,
 	GatewayCloseCodes.DecodeError,
@@ -371,7 +371,7 @@ export class GatewaySocket extends EventEmitter {
 				token: this.connection.token,
 				intents: this.connection.intents,
 				properties: this.connection.properties,
-				// presence: this.presence, 
+				// presence: this.presence,
 				// ^ initial presence not respected
 			},
 		})

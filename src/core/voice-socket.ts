@@ -1,6 +1,6 @@
 import EventEmitter from 'eventemitter3'
 import { GatewayCloseCodes } from '@/types/gateway'
-import { LogLevel, SocketState } from '@/types/common'
+import { LogLevel, SocketState, WebSocketCloseCodes } from '@/types/common'
 import {
 	Codecs,
 	VoiceCloseCodes,
@@ -15,8 +15,8 @@ import * as Davey from '@snazzah/davey'
 const RESUME_ATTEMPT_LIMIT = 3
 
 const RESUMABLE_CLOSE_CODES = [
-	1005, // No Status Rcvd
-	1006, // Abnormal Closure
+	WebSocketCloseCodes.NoStatusReceived,
+	WebSocketCloseCodes.AbnormalClosure,
 	GatewayCloseCodes.UnknownError,
 	VoiceCloseCodes.UnknownOpcode,
 	VoiceCloseCodes.FailedToDecode,
