@@ -60,6 +60,8 @@ export interface GatewaySocket extends EventEmitter {
 export class GatewaySocket extends EventEmitter {
 	private ws!: WebSocket
 
+	private ds = new DecompressionStream('deflate')
+
 	private hartbeat_interval?: number
 	private missed_heartbeats = 0
 	private sequence: number | null = null
@@ -161,10 +163,10 @@ export class GatewaySocket extends EventEmitter {
 		if (this.state !== SocketState.RESUMING) this.emit('state', SocketState.INITIALISING)
 
 		const endpoint =
-			this.state === SocketState.RESUMING
+			(this.state === SocketState.RESUMING
 				? this.connection.resume_gateway_endpoint
-				: undefined
-		const address = `wss://${endpoint ?? DEFAULT_GATEWAY_ENDPOINT}/?v=${GatewayVersion}`
+				: undefined) ?? DEFAULT_GATEWAY_ENDPOINT
+		const address = `wss://${endpoint}/?v=${GatewayVersion}`
 		const bad_ready_states = [WebSocket.CONNECTING, WebSocket.OPEN] as number[]
 
 		if (bad_ready_states.includes(this.ws?.readyState)) {
@@ -231,7 +233,10 @@ export class GatewaySocket extends EventEmitter {
 		}
 
 		if (data instanceof ArrayBuffer) {
-			this.emit('warn', 'Unexpected binary frame received.', data)
+			const stream = new Blob([data]).stream().pipeThrough(this.ds)
+			void new Response(stream)
+				.json()
+				.then((json) => this.emit('payload.json', json as GatewayReceivePayload))
 			return
 		}
 	}
@@ -368,6 +373,7 @@ export class GatewaySocket extends EventEmitter {
 		this.sendPayload({
 			op: GatewayOpcodes.Identify,
 			d: {
+				compress: true,
 				token: this.connection.token,
 				intents: this.connection.intents,
 				properties: this.connection.properties,
