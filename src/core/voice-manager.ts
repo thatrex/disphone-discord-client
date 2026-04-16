@@ -85,7 +85,7 @@ export class VoiceManager extends EventEmitter {
 		this.src_o = this.ac.createMediaStreamSource(this.dst_o.stream)
 
 		this.gateway = gateway_socket
-		this.gateway.on('payload-json', (p) => this.onGatewayPacket(p as GatewayReceivePayload))
+		this.gateway.on('payload.json', (p) => this.onGatewayPacket(p))
 		this.gateway.on('state', (s) => ['DONE', 'FAILED'].includes(s) ?? this._disconnect())
 
 		this.audio_settings = {
@@ -190,7 +190,7 @@ export class VoiceManager extends EventEmitter {
 			token,
 		})
 		this.voice.on('state', () => this.updateState())
-		this.voice.on('payload-json', (p) => this.onVoicePacket(p as VoiceReceivePayload))
+		this.voice.on('payload.json', (p) => this.onVoicePacket(p))
 
 		this.rtc = new VoiceRTC({ ac: this.ac })
 		this.rtc.on('state', () => this.updateState())

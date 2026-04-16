@@ -53,8 +53,8 @@ export interface GatewaySocket extends EventEmitter {
 	emit(event: 'state', state: SocketState): boolean
 	on(event: 'state', listener: (state: SocketState) => void): this
 
-	emit(event: 'payload-json', payload: object): boolean
-	on(event: 'payload-json', listener: (payload: object) => void): this
+	emit(event: 'payload.json', payload: GatewayReceivePayload): boolean
+	on(event: 'payload.json', listener: (payload: GatewayReceivePayload) => void): this
 }
 
 export class GatewaySocket extends EventEmitter {
@@ -62,7 +62,7 @@ export class GatewaySocket extends EventEmitter {
 
 	private hartbeat_interval?: number
 	private missed_heartbeats = 0
-	private last_sequence_number: number | null = null
+	private sequence: number | null = null
 
 	private indentified = false
 
@@ -117,7 +117,7 @@ export class GatewaySocket extends EventEmitter {
 			properties: properties ?? DEFAULT_IDENTIFY_PROPERTIES,
 		}
 
-		this.on('payload-json', (p) => this.onJSON(p as GatewayReceivePayload))
+		this.on('payload.json', (p) => this.onPayloadJSON(p))
 		this.on('state', (s) => {
 			this._state = s
 			this.emit('debug', `State update: ${s}`)
@@ -188,7 +188,7 @@ export class GatewaySocket extends EventEmitter {
 			op: GatewayOpcodes.Resume,
 			d: {
 				token: this.connection.token,
-				seq: this.last_sequence_number!,
+				seq: this.sequence!,
 				session_id: this.connection.session_id!,
 			},
 		})
@@ -221,9 +221,9 @@ export class GatewaySocket extends EventEmitter {
 	private onWebSocketMessage({ data }: MessageEvent): void {
 		if (typeof data === 'string') {
 			try {
-				const parsed = JSON.parse(data) as object
+				const parsed = JSON.parse(data) as GatewayReceivePayload
 				this.emit('debug', 'Frame received:', parsed)
-				this.emit('payload-json', parsed)
+				this.emit('payload.json', parsed)
 			} catch (error) {
 				this.emit('debug', 'Error parsing frame:', error)
 			}
@@ -236,7 +236,7 @@ export class GatewaySocket extends EventEmitter {
 		}
 	}
 
-	private onJSON(payload: GatewayReceivePayload): void {
+	private onPayloadJSON(payload: GatewayReceivePayload): void {
 		switch (payload.op) {
 			case GatewayOpcodes.Heartbeat: {
 				this.sendHeartbeat()
@@ -273,7 +273,8 @@ export class GatewaySocket extends EventEmitter {
 	}
 
 	private onDispatch(packet: GatewayDispatchPayload): void {
-		this.last_sequence_number = packet.s
+		this.sequence = packet.s
+
 		switch (packet.t) {
 			case GatewayDispatchEvents.Ready: {
 				const {
@@ -305,7 +306,7 @@ export class GatewaySocket extends EventEmitter {
 		this.missed_heartbeats++
 		this.sendPayload({
 			op: GatewayOpcodes.Heartbeat,
-			d: this.last_sequence_number,
+			d: this.sequence,
 		})
 	}
 
@@ -315,7 +316,6 @@ export class GatewaySocket extends EventEmitter {
 		clearInterval(this.hartbeat_interval)
 		this.hartbeat_interval = window.setInterval(() => {
 			if (this.missed_heartbeats >= 3) {
-				if (this.state !== SocketState.READY) return
 				void this.attemptResume('Too many missed heartbeats.')
 				return
 			}

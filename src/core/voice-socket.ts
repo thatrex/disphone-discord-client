@@ -36,29 +36,37 @@ export interface VoiceSocket extends EventEmitter {
 	emit(event: 'state', state: SocketState): boolean
 	on(event: 'state', listener: (state: SocketState) => void): this
 
-	emit(event: 'payload-json', frame: object): boolean
-	on(event: 'payload-json', listener: (frame: object) => void): this
+	emit(event: 'payload.json', payload: VoiceReceivePayload): boolean
+	on(event: 'payload.json', listener: (payload: VoiceReceivePayload) => void): this
 
-	emit(event: 'payload-binary', frame: ArrayBuffer): boolean
-	on(event: 'payload-binary', listener: (frame: ArrayBuffer) => void): this
+	emit(event: 'payload.binary', payload: ArrayBuffer): boolean
+	on(event: 'payload.binary', listener: (payload: ArrayBuffer) => void): this
 }
 
 export class VoiceSocket extends EventEmitter {
 	private ws!: WebSocket
-
-	private hartbeat_interval?: number
-	private missed_heartbeats = 0
-
-	private indentified = false
-
-	private resumed = false
-	private resume_attempts = 0
 
 	private _state: SocketState = SocketState.INITIAL
 
 	public get state(): SocketState {
 		return this._state
 	}
+
+	private hartbeat_interval?: number
+	private missed_heartbeats = 0
+	private last_heartbeat_ack = 0
+	private last_heartbeat_send = 0
+
+	private _ping?: number
+
+	public get ping(): number | undefined {
+		return this._ping
+	}
+
+	private sequence = -1
+	private indentified = false
+	private resumed = false
+	private resume_attempts = 0
 
 	private connection: {
 		session_id: string
@@ -79,8 +87,8 @@ export class VoiceSocket extends EventEmitter {
 
 		this.connection = params
 
-		this.on('payload-binary', (b) => b) // TODO
-		this.on('payload-json', (d) => this.onJSON(d as VoiceReceivePayload))
+		this.on('payload.binary', (b) => b) // TODO
+		this.on('payload.json', (d) => this.onPayloadJSON(d))
 		this.on('state', (s) => {
 			this._state = s
 			this.emit('debug', `State update: ${s}`)
@@ -97,7 +105,7 @@ export class VoiceSocket extends EventEmitter {
 
 	public sendPayload(packet: VoiceSendPayload): void {
 		if (this.ws.readyState !== WebSocket.OPEN) {
-			this.emit('error', 'Unable to send frame, socket not open.')
+			this.emit('error', 'Unable to send payload, socket not open.')
 			return
 		}
 
@@ -160,8 +168,7 @@ export class VoiceSocket extends EventEmitter {
 
 		this.sendPayload({
 			op: VoiceOpcodes.Resume,
-			// TODO: something with seq_ack
-			d: { server_id, session_id, token, seq_ack: 1 },
+			d: { server_id, session_id, token, seq_ack: this.sequence },
 		})
 
 		this.resumed = false
@@ -192,23 +199,25 @@ export class VoiceSocket extends EventEmitter {
 	private onWebSocketMessage({ data }: MessageEvent): void {
 		if (typeof data === 'string') {
 			try {
-				const parsed = JSON.parse(data) as object
-				this.emit('debug', 'Frame Received:', parsed)
-				this.emit('payload-json', parsed)
+				const parsed = JSON.parse(data) as VoiceReceivePayload
+				this.emit('debug', 'Payload Received:', parsed)
+				this.emit('payload.json', parsed)
 			} catch (error) {
-				this.emit('debug', 'Error Parsing Frame:', error)
+				this.emit('debug', 'Error Parsing Payload:', error)
 			}
 			return
 		}
 
 		if (data instanceof ArrayBuffer) {
-			this.emit('debug', 'Frame Received:', data)
-			this.emit('payload-binary', data)
+			this.emit('debug', 'Payload Received:', data)
+			this.emit('payload.binary', data)
 			return
 		}
 	}
 
-	private onJSON(payload: VoiceReceivePayload): void {
+	private onPayloadJSON(payload: VoiceReceivePayload): void {
+		if ('seq' in payload) this.sequence = payload.seq
+
 		switch (payload.op) {
 			case VoiceOpcodes.Hello: {
 				this.initHartbeat(payload.d.heartbeat_interval)
@@ -217,7 +226,6 @@ export class VoiceSocket extends EventEmitter {
 			}
 
 			case VoiceOpcodes.Ready: {
-				this._state = SocketState.READY
 				this.emit('state', SocketState.READY)
 				break
 			}
@@ -229,18 +237,20 @@ export class VoiceSocket extends EventEmitter {
 			}
 
 			case VoiceOpcodes.HeartbeatAck: {
+				this.last_heartbeat_ack = Date.now()
 				this.missed_heartbeats = 0
+				this._ping = this.last_heartbeat_ack - this.last_heartbeat_send
 				break
 			}
 		}
 	}
 
 	private sendHeartbeat(): void {
+		this.last_heartbeat_send = Date.now()
 		this.missed_heartbeats++
 		this.sendPayload({
 			op: VoiceOpcodes.Heartbeat,
-			// TODO: something with seq_ack
-			d: { t: Math.floor(Math.random() * 100_000_000_000), seq_ack: 1 },
+			d: { t: this.last_heartbeat_send, seq_ack: this.sequence },
 		})
 	}
 
@@ -248,8 +258,7 @@ export class VoiceSocket extends EventEmitter {
 		this.emit('debug', 'Initialising heartbeat')
 		clearInterval(this.hartbeat_interval)
 		this.hartbeat_interval = window.setInterval(() => {
-			if (this.missed_heartbeats >= 3) {
-				if (this.state !== SocketState.READY) return
+			if (this.last_heartbeat_send !== 0 && this.missed_heartbeats >= 3) {
 				void this.attemptResume('Too many missed heartbeats.')
 				return
 			}
