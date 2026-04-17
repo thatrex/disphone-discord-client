@@ -8,6 +8,7 @@ import {
 	VoiceReceivePayload,
 	VoiceGatewayVersion,
 	VoiceSendPayload,
+	VoiceReceivePayloadBinaryParsed,
 } from '@/types/voice'
 import { wait } from '@/utils/wait'
 import * as Davey from '@snazzah/davey'
@@ -39,8 +40,8 @@ export interface VoiceSocket extends EventEmitter {
 	emit(event: 'payload.json', payload: VoiceReceivePayload): boolean
 	on(event: 'payload.json', listener: (payload: VoiceReceivePayload) => void): this
 
-	emit(event: 'payload.binary', payload: ArrayBuffer): boolean
-	on(event: 'payload.binary', listener: (payload: ArrayBuffer) => void): this
+	emit(event: 'payload.binary', payload: VoiceReceivePayloadBinaryParsed): boolean
+	on(event: 'payload.binary', listener: (payload: VoiceReceivePayloadBinaryParsed) => void): this
 }
 
 export class VoiceSocket extends EventEmitter {
@@ -87,7 +88,7 @@ export class VoiceSocket extends EventEmitter {
 
 		this.connection = params
 
-		this.on('payload.binary', (b) => b) // TODO
+		this.on('payload.binary', (b) => this.onPayloadBinary(b))
 		this.on('payload.json', (d) => this.onPayloadJSON(d))
 		this.on('state', (s) => {
 			this._state = s
@@ -209,8 +210,17 @@ export class VoiceSocket extends EventEmitter {
 		}
 
 		if (data instanceof ArrayBuffer) {
-			this.emit('debug', 'Payload Received:', data)
-			this.emit('payload.binary', data)
+			const v = new DataView(data)
+			const a = new Uint8Array(data)
+
+			const payload = {
+				seq: v.getUint16(0),
+				op: v.getUint8(2),
+				data: a.subarray(3),
+			} satisfies VoiceReceivePayloadBinaryParsed
+
+			this.emit('debug', 'Payload Received:', payload)
+			this.emit('payload.binary', payload)
 			return
 		}
 	}
@@ -240,10 +250,13 @@ export class VoiceSocket extends EventEmitter {
 				this.last_heartbeat_ack = Date.now()
 				this.missed_heartbeats = 0
 				this._ping = this.last_heartbeat_ack - this.last_heartbeat_send
+				this.emit('debug', `Ping: ${this.ping}`)
 				break
 			}
 		}
 	}
+
+	private onPayloadBinary(payload: VoiceReceivePayloadBinaryParsed): void {}
 
 	private sendHeartbeat(): void {
 		this.last_heartbeat_send = Date.now()
