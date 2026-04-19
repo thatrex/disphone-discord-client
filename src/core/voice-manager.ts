@@ -85,7 +85,7 @@ export class VoiceManager extends EventEmitter {
 		this.src_o = this.ac.createMediaStreamSource(this.dst_o.stream)
 
 		this.gateway = gateway_socket
-		this.gateway.on('payload.json', (p) => this.onGatewayPacket(p))
+		this.gateway.on('payload.json', (p) => this.onGatewayPayload(p))
 		this.gateway.on('state', (s) => ['DONE', 'FAILED'].includes(s) ?? this._disconnect())
 
 		this.audio_settings = {
@@ -190,10 +190,22 @@ export class VoiceManager extends EventEmitter {
 			token,
 		})
 		this.voice.on('state', () => this.updateState())
-		this.voice.on('payload.json', (p) => this.onVoicePacket(p))
+		this.voice.on('payload.json', (p) => this.onVoicePayload(p))
+
+		this.voice.on('error', (...m) => this.emit('error', '[Socket]', ...m))
+		this.voice.on('warn', (...m) => this.emit('warn', '[Socket]', ...m))
+		this.voice.on('info', (...m) => this.emit('info', '[Socket]', ...m))
+		this.voice.on('log', (...m) => this.emit('log', '[Socket]', ...m))
+		this.voice.on('debug', (...m) => this.emit('debug', '[Socket]', ...m))
 
 		this.rtc = new VoiceRTC({ ac: this.ac })
 		this.rtc.on('state', () => this.updateState())
+
+		this.rtc.on('error', (...m) => this.emit('error', '[RTC]', ...m))
+		this.rtc.on('warn', (...m) => this.emit('warn', '[RTC]', ...m))
+		this.rtc.on('info', (...m) => this.emit('info', '[RTC]', ...m))
+		this.rtc.on('log', (...m) => this.emit('log', '[RTC]', ...m))
+		this.rtc.on('debug', (...m) => this.emit('debug', '[RTC]', ...m))
 
 		this.src_i.connect(this.rtc.dst)
 		this.rtc.src.connect(this.dst_o)
@@ -257,10 +269,10 @@ export class VoiceManager extends EventEmitter {
 		}
 	}
 
-	private onGatewayPacket(packet: GatewayReceivePayload): void {
-		switch (packet.t) {
+	private onGatewayPayload(payload: GatewayReceivePayload): void {
+		switch (payload.t) {
 			case GatewayDispatchEvents.VoiceStateUpdate: {
-				const { channel_id, user_id } = packet.d
+				const { channel_id, user_id } = payload.d
 
 				if (user_id !== this.gateway.identity!.id) break
 				if (channel_id) break
@@ -272,7 +284,7 @@ export class VoiceManager extends EventEmitter {
 			}
 
 			case GatewayDispatchEvents.VoiceServerUpdate: {
-				const { endpoint, guild_id, token } = packet.d
+				const { endpoint, guild_id, token } = payload.d
 				if (!endpoint) break
 				this.emit('state', VoiceManagerState.CONNECTING)
 				void this.initConnection(endpoint, guild_id, token)
@@ -281,15 +293,15 @@ export class VoiceManager extends EventEmitter {
 		}
 	}
 
-	private onVoicePacket(packet: VoiceReceivePayload): void {
-		switch (packet.op) {
+	private onVoicePayload(payload: VoiceReceivePayload): void {
+		switch (payload.op) {
 			case VoiceOpcodes.Ready: {
 				this.voice!.sendSelectProtocol(this.select_protocol_sdp!, this.codecs!)
 				break
 			}
 
 			case VoiceOpcodes.SessionDescription: {
-				this.rtc!.setDiscordSDP(packet.d.sdp)
+				this.rtc!.setDiscordSDP(payload.d.sdp)
 				this.setSpeaking(this.speaking)
 				break
 			}
@@ -300,13 +312,13 @@ export class VoiceManager extends EventEmitter {
 			}
 
 			case VoiceOpcodes.Speaking: {
-				const { user_id, ssrc, speaking } = packet.d
+				const { user_id, ssrc, speaking } = payload.d
 				if (speaking) this.rtc!.addUserAudioReceiver(user_id, ssrc)
 				break
 			}
 
 			case VoiceOpcodes.ClientDisconnect: {
-				const { user_id } = packet.d
+				const { user_id } = payload.d
 				this.rtc!.stopUserAudioReceiver(user_id)
 				break
 			}

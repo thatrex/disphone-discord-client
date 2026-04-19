@@ -8,6 +8,7 @@
 	const c = new Client({
 		token: import.meta.env.VITE_DISCORD_TOKEN,
 		intents: GatewayIntentBits.GuildVoiceStates,
+		debug: true,
 	})
 
 	const vm = c.createVoiceManager({ ac })

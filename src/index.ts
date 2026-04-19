@@ -18,6 +18,8 @@ interface Client extends EventEmitter {
 class Client extends EventEmitter {
 	private _gateway: GatewaySocket
 
+	public debug: boolean
+
 	public get gateway(): GatewaySocket {
 		return this._gateway
 	}
@@ -31,8 +33,11 @@ class Client extends EventEmitter {
 		intents: number
 		properties?: GatewayIdentifyProperties
 		presence?: GatewayPresenceUpdateData
+		debug?: boolean
 	}) {
 		super()
+
+		this.debug = params.debug ?? false
 
 		this._gateway = new GatewaySocket({
 			token: params.token,
@@ -42,6 +47,12 @@ class Client extends EventEmitter {
 		})
 
 		this._gateway.on('state', (s) => this.emit('state', s))
+
+		this._gateway.on('error', (...m) => console.error('[Gateway Socket]', ...m))
+		this._gateway.on('warn', (...m) => console.warn('[Gateway Socket]', ...m))
+		this._gateway.on('info', (...m) => console.info('[Gateway Socket]', ...m))
+		this._gateway.on('log', (...m) => console.log('[Gateway Socket]', ...m))
+		this._gateway.on('debug', (...m) => this.debug && console.debug('[Gateway Socket]', ...m))
 	}
 
 	public start(): void {
@@ -60,11 +71,19 @@ class Client extends EventEmitter {
 		ac: AudioContext
 		audio_settings?: Partial<AudioSettings>
 	}): VoiceManager {
-		return new VoiceManager({
+		const vm = new VoiceManager({
 			ac: params.ac,
 			gateway_socket: this._gateway,
 			audio_settings: params.audio_settings!,
 		})
+
+		vm.on('error', (...m) => console.error('[Voice Manager]', ...m))
+		vm.on('warn', (...m) => console.warn('[Voice Manager]', ...m))
+		vm.on('info', (...m) => console.info('[Voice Manager]', ...m))
+		vm.on('log', (...m) => console.log('[Voice Manager]', ...m))
+		vm.on('debug', (...m) => this.debug && console.debug('[Voice Manager]', ...m))
+
+		return vm
 	}
 
 	public shutdown(): void {

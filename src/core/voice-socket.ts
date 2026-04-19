@@ -88,8 +88,10 @@ export class VoiceSocket extends EventEmitter {
 
 		this.connection = params
 
-		this.on('payload.binary', (b) => this.onPayloadBinary(b))
 		this.on('payload.json', (d) => this.onPayloadJSON(d))
+
+		this.on('payload.binary', (b) => this.onPayloadBinary(b))
+
 		this.on('state', (s) => {
 			this._state = s
 			this.emit('debug', `State update: ${s}`)
@@ -104,17 +106,17 @@ export class VoiceSocket extends EventEmitter {
 		this.initSocket()
 	}
 
-	public sendPayload(packet: VoiceSendPayload): void {
+	public sendPayload(payload: VoiceSendPayload): void {
 		if (this.ws.readyState !== WebSocket.OPEN) {
 			this.emit('error', 'Unable to send payload, socket not open.')
 			return
 		}
 
 		try {
-			this.emit('debug', 'Sending packet:', packet)
-			this.ws.send(JSON.stringify(packet))
+			this.emit('debug', 'Sending payload:', payload)
+			this.ws.send(JSON.stringify(payload))
 		} catch (err) {
-			this.emit('error', 'Error sending packet:', err)
+			this.emit('error', 'Error sending payload:', err)
 		}
 	}
 
@@ -201,7 +203,6 @@ export class VoiceSocket extends EventEmitter {
 		if (typeof data === 'string') {
 			try {
 				const parsed = JSON.parse(data) as VoiceReceivePayload
-				this.emit('debug', 'Payload Received:', parsed)
 				this.emit('payload.json', parsed)
 			} catch (error) {
 				this.emit('debug', 'Error Parsing Payload:', error)
@@ -219,13 +220,14 @@ export class VoiceSocket extends EventEmitter {
 				data: a.subarray(3),
 			} satisfies VoiceReceivePayloadBinaryParsed
 
-			this.emit('debug', 'Payload Received:', payload)
 			this.emit('payload.binary', payload)
 			return
 		}
 	}
 
 	private onPayloadJSON(payload: VoiceReceivePayload): void {
+		this.emit('debug', 'Payload Received:', payload)
+
 		if ('seq' in payload) this.sequence = payload.seq
 
 		switch (payload.op) {
@@ -256,7 +258,11 @@ export class VoiceSocket extends EventEmitter {
 		}
 	}
 
-	private onPayloadBinary(payload: VoiceReceivePayloadBinaryParsed): void {}
+	private onPayloadBinary(payload: VoiceReceivePayloadBinaryParsed): void {
+		this.emit('debug', 'Payload Received:', payload)
+
+		if (payload.seq) this.sequence = payload.seq
+	}
 
 	private sendHeartbeat(): void {
 		this.last_heartbeat_send = Date.now()

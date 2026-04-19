@@ -120,6 +120,7 @@ export class GatewaySocket extends EventEmitter {
 		}
 
 		this.on('payload.json', (p) => this.onPayloadJSON(p))
+
 		this.on('state', (s) => {
 			this._state = s
 			this.emit('debug', `State update: ${s}`)
@@ -134,17 +135,17 @@ export class GatewaySocket extends EventEmitter {
 		this.initSocket()
 	}
 
-	public sendPayload(packet: GatewaySendPayload): void {
+	public sendPayload(payload: GatewaySendPayload): void {
 		if (this.ws.readyState !== WebSocket.OPEN) {
 			this.emit('error', 'Unable to send frame, socket not open.')
 			return
 		}
 
 		try {
-			this.emit('debug', 'Sending packet:', packet)
-			this.ws.send(JSON.stringify(packet))
+			this.emit('debug', 'Sending payload:', payload)
+			this.ws.send(JSON.stringify(payload))
 		} catch (err) {
-			this.emit('error', 'Error sending packet:', err)
+			this.emit('error', 'Error sending payload:', err)
 		}
 	}
 
@@ -224,7 +225,6 @@ export class GatewaySocket extends EventEmitter {
 		if (typeof data === 'string') {
 			try {
 				const parsed = JSON.parse(data) as GatewayReceivePayload
-				this.emit('debug', 'Frame received:', parsed)
 				this.emit('payload.json', parsed)
 			} catch (error) {
 				this.emit('debug', 'Error parsing frame:', error)
@@ -242,6 +242,8 @@ export class GatewaySocket extends EventEmitter {
 	}
 
 	private onPayloadJSON(payload: GatewayReceivePayload): void {
+		this.emit('debug', 'Payload received:', payload)
+
 		switch (payload.op) {
 			case GatewayOpcodes.Heartbeat: {
 				this.sendHeartbeat()
@@ -260,13 +262,13 @@ export class GatewaySocket extends EventEmitter {
 			}
 
 			case GatewayOpcodes.InvalidSession: {
-				if (payload.d === true) void this.attemptResume('Invalid session packet received.')
+				if (payload.d === true) void this.attemptResume('Invalid session payload received.')
 				else this.destroy()
 				break
 			}
 
 			case GatewayOpcodes.Reconnect: {
-				void this.attemptResume('Reconnect packet received')
+				void this.attemptResume('Reconnect payload received.')
 				break
 			}
 
@@ -277,16 +279,16 @@ export class GatewaySocket extends EventEmitter {
 		}
 	}
 
-	private onDispatch(packet: GatewayDispatchPayload): void {
-		this.sequence = packet.s
+	private onDispatch(payload: GatewayDispatchPayload): void {
+		this.sequence = payload.s
 
-		switch (packet.t) {
+		switch (payload.t) {
 			case GatewayDispatchEvents.Ready: {
 				const {
 					session_id,
 					resume_gateway_url,
 					user: { id, username, discriminator, bot },
-				} = packet.d
+				} = payload.d
 
 				const resume_gateway_endpoint = resume_gateway_url.replace('wss://', '')
 
