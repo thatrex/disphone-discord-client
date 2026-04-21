@@ -4,7 +4,8 @@ import { createPlaceholderStream } from '@/utils/create-placeholder-stream'
 import { SDP } from '@/utils/sdp'
 import { Codecs } from '@/types/voice'
 
-const DEFAULT_AUDIO_SETTINGS = {
+export const SILENCE_FRAME = [0xf8, 0xff, 0xfe] // opus 'silent' frame
+export const DEFAULT_AUDIO_SETTINGS = {
 	stereo: false,
 	bitrate_kbps: 64,
 	mode: 'sendonly',

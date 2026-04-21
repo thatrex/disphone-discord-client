@@ -2,10 +2,10 @@ import EventEmitter from 'eventemitter3'
 import { SocketState, AudioSettings, LogLevel } from '@/types/common'
 import { GatewayOpcodes, GatewayDispatchEvents, GatewayReceivePayload } from '@/types/gateway'
 import { Codecs, VoiceReceivePayload, VoiceOpcodes } from '@/types/voice'
-import { VoiceManagerConnectionError } from './errors'
-import { GatewaySocket } from './gateway-socket'
-import { VoiceSocket } from './voice-socket'
-import { VoiceRTC } from './voice-rtc'
+import { VoiceManagerConnectionError } from '../errors'
+import { GatewaySocket } from '../gateway/socket'
+import { VoiceSocket } from './socket'
+import { VoiceRTC } from './rtc'
 
 export type VoiceManagerState = keyof typeof VoiceManagerState
 export const VoiceManagerState = {
@@ -328,7 +328,7 @@ export class VoiceManager extends EventEmitter {
 	private setSpeaking(speaking: boolean): void {
 		this.speaking = speaking
 
-		this.voice?.sendPayload({
+		this.voice?.sendPayloadJSON({
 			op: VoiceOpcodes.Speaking,
 			d: {
 				speaking: Number(speaking),

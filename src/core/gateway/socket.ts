@@ -137,7 +137,7 @@ export class GatewaySocket extends EventEmitter {
 
 	public sendPayload(payload: GatewaySendPayload): void {
 		if (this.ws.readyState !== WebSocket.OPEN) {
-			this.emit('error', 'Unable to send frame, socket not open.')
+			this.emit('warn', 'Unable to send payload, socket not open:', payload)
 			return
 		}
 

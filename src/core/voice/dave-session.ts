@@ -1,7 +1,5 @@
 import EventEmitter from 'eventemitter3'
-import { LogLevel } from '../types/common'
-
-export const SILENCE_FRAME = [0xf8, 0xff, 0xfe] // opus 'silent' frame
+import { LogLevel } from '@/types/common'
 
 export interface DaveSession extends EventEmitter {
 	emit(event: LogLevel, ...data: any[]): boolean

@@ -48,10 +48,15 @@ export type VoiceReceivePayload =
 	| VoiceSessionDescription
 	| VoiceSpeaking
 
+export type VoiceSendPayloadBinary = {
+	op: VoiceOpcodes
+	data: ArrayBufferLike
+}
+
 export type VoiceReceivePayloadBinaryParsed = {
 	seq: number
-	op: number
-	data: Uint8Array<ArrayBuffer>
+	op: VoiceOpcodes
+	data: Buffer
 }
 
 /** @see {@link https://discord.com/developers/docs/topics/voice-connections#establishing-a-voice-websocket-connection} */

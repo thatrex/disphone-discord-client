@@ -9,6 +9,7 @@ import {
 	VoiceGatewayVersion,
 	VoiceSendPayload,
 	VoiceReceivePayloadBinaryParsed,
+	VoiceSendPayloadBinary,
 } from '@/types/voice'
 import { wait } from '@/utils/wait'
 import * as Davey from '@snazzah/davey'
@@ -106,23 +107,47 @@ export class VoiceSocket extends EventEmitter {
 		this.initSocket()
 	}
 
-	public sendPayload(payload: VoiceSendPayload): void {
+	public sendPayloadJSON(payload: VoiceSendPayload): boolean {
 		if (this.ws.readyState !== WebSocket.OPEN) {
 			this.emit('error', 'Unable to send payload, socket not open.')
-			return
+			return false
 		}
 
 		try {
-			this.emit('debug', 'Sending payload:', payload)
-			this.ws.send(JSON.stringify(payload))
-		} catch (err) {
-			this.emit('error', 'Error sending payload:', err)
+			const message = JSON.stringify(payload)
+
+			this.ws.send(message)
+			this.emit('debug', 'Sent payload:', payload)
+			return true
+		} catch (error) {
+			this.emit('error', 'Error sending payload:', error)
+			return false
+		}
+	}
+
+	public sendPayloadBinary(payload: VoiceSendPayloadBinary): boolean {
+		if (this.ws.readyState !== WebSocket.OPEN) {
+			this.emit('error', 'Unable to send payload, socket not open.')
+			return false
+		}
+
+		try {
+			const op = new Uint8Array(payload.op)
+			const data = new Uint8Array(payload.data)
+			const message = Buffer.concat([op, data])
+
+			this.ws.send(message)
+			this.emit('debug', 'Sent payload:', payload)
+			return true
+		} catch (error) {
+			this.emit('error', 'Error sending payload:', error)
+			return false
 		}
 	}
 
 	public sendSelectProtocol(sdp: string, codecs: Codecs): void {
 		this.emit('debug', 'Selecting protocol')
-		this.sendPayload({
+		this.sendPayloadJSON({
 			op: VoiceOpcodes.SelectProtocol,
 			d: {
 				protocol: 'webrtc',
@@ -169,7 +194,7 @@ export class VoiceSocket extends EventEmitter {
 
 		const { guild_id: server_id, session_id, token } = this.connection
 
-		this.sendPayload({
+		this.sendPayloadJSON({
 			op: VoiceOpcodes.Resume,
 			d: { server_id, session_id, token, seq_ack: this.sequence },
 		})
@@ -217,7 +242,7 @@ export class VoiceSocket extends EventEmitter {
 			const payload = {
 				seq: v.getUint16(0),
 				op: v.getUint8(2),
-				data: a.subarray(3),
+				data: a.subarray(3) as Buffer,
 			} satisfies VoiceReceivePayloadBinaryParsed
 
 			this.emit('payload.binary', payload)
@@ -267,7 +292,7 @@ export class VoiceSocket extends EventEmitter {
 	private sendHeartbeat(): void {
 		this.last_heartbeat_send = Date.now()
 		this.missed_heartbeats++
-		this.sendPayload({
+		this.sendPayloadJSON({
 			op: VoiceOpcodes.Heartbeat,
 			d: { t: this.last_heartbeat_send, seq_ack: this.sequence },
 		})
@@ -321,7 +346,7 @@ export class VoiceSocket extends EventEmitter {
 		this.emit('debug', 'Sending identification')
 
 		this.indentified = true
-		this.sendPayload({
+		this.sendPayloadJSON({
 			op: VoiceOpcodes.Identify,
 			d: {
 				token: this.connection.token,

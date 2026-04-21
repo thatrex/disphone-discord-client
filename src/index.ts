@@ -5,8 +5,8 @@ import {
 	GatewayOpcodes,
 } from 'discord-api-types/v10'
 import { AudioSettings, SocketState } from './types/common'
-import { GatewaySocket } from './core/gateway-socket'
-import { VoiceManager } from './core/voice-manager'
+import { GatewaySocket } from './core/gateway/socket'
+import { VoiceManager } from './core/voice/manager'
 
 interface Client extends EventEmitter {
 	on(event: '', listener: () => void): this
